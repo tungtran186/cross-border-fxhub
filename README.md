@@ -71,6 +71,68 @@ tài khoản #0 (owner, người deploy).
 Khi tắt rồi bật lại node: chạy lại bước 1, 2, 4 rồi tải lại trang, và trong MetaMask chọn
 Settings → Advanced → **Clear activity tab data** để tránh lỗi "nonce too high".
 
+## Deploy lên Sepolia (testnet)
+
+### Chuẩn bị (làm 1 lần)
+
+Cất 3 bí mật vào keystore của Hardhat (mã hoá bằng mật khẩu, không nằm trong code hay git):
+
+```shell
+npx hardhat keystore set SEPOLIA_RPC_URL       # URL RPC Sepolia (Alchemy/Infura...)
+npx hardhat keystore set SEPOLIA_PRIVATE_KEY   # khoá ví dev, CHỈ dùng cho testnet
+npx hardhat keystore set ETHERSCAN_API_KEY     # khoá API Etherscan để verify
+```
+
+Ví dev cần có SepoliaETH để trả phí gas (xin ở faucet, ví dụ
+https://cloud.google.com/application/web3/faucet/ethereum/sepolia).
+
+### Chạy theo đúng thứ tự
+
+🔑 = lệnh sẽ hỏi **mật khẩu keystore** (gõ vào terminal, không hiện ký tự). Mỗi lệnh hỏi 1 lần.
+
+```shell
+# 1. 🔑 Kiểm tra ví deploy đủ SepoliaETH chưa
+npx hardhat run scripts/check-balance.ts --network sepolia
+#    Đúng: in địa chỉ ví, số dư, bảng ước tính gas, dòng cuối "✅ Đủ tiền. Có thể deploy."
+#    Nếu "❌ Thiếu ... ETH": xin thêm faucet rồi chạy lại. KHÔNG làm tiếp.
+
+# 2. 🔑 Deploy 5 token + FXHub + listToken (KHÔNG dùng --reset trên Sepolia)
+npx hardhat ignition deploy ignition/modules/Deploy.ts --network sepolia
+#    Ignition hỏi xác nhận deploy lên sepolia → gõ y. Mất vài phút (10 giao dịch).
+#    Đúng: "[ CrossBorderModule ] successfully deployed 🚀" + 6 địa chỉ.
+#    Địa chỉ được ghi vào ignition/deployments/chain-11155111/ (file này được commit vào git).
+#    Bị ngắt giữa chừng: chạy lại đúng lệnh này, Ignition làm tiếp phần còn thiếu.
+
+# 3. 🔑 Verify mã nguồn trên Etherscan
+npx hardhat ignition verify chain-11155111 --network sepolia
+#    Đúng: mỗi contract báo verify thành công kèm link sepolia.etherscan.io/address/...#code
+#    Contract đã verify rồi thì báo "already verified" – không sao.
+
+# 4. 🔑 Nạp thanh khoản 4 quỹ (12 giao dịch, vài phút)
+npx hardhat run scripts/seed.ts --network sepolia
+#    Đúng: mỗi giao dịch in "⏳ ... https://sepolia.etherscan.io/tx/0x..." rồi "✅ ... block N, gas ..."
+#    Cuối cùng in tỷ giá: 1 vUSD = 26.000 vVND / 150 vJPY / 1.400 vKRW / 32 vTWD.
+#    Bị ngắt giữa chừng: chạy lại, quỹ đã nạp sẽ "↷ bỏ qua".
+
+# 5. 🔑 Gửi thử 100.000 vJPY → vVND
+#    Sepolia chỉ có 1 ví nên ví deploy tự gửi cho chính mình. Muốn gửi cho ví khác (PowerShell):
+#      $env:DEMO_RECIPIENT="0x...địa chỉ người nhận..."
+npx hardhat run scripts/demo-send.ts --network sepolia
+#    Đúng: báo giá ≈ 17.206.650 vVND, thực nhận = báo giá, hụt ≈ 0,73%, gas ≈ 103.000,
+#    mã giao dịch dạng link https://sepolia.etherscan.io/tx/0x...
+
+# 6. Xuất địa chỉ Sepolia cho frontend (KHÔNG hỏi mật khẩu: chỉ đọc file trên máy)
+npx hardhat run scripts/export-frontend.ts
+#    Đúng: in 2 dòng "chain 31337 (Hardhat Local)" và "chain 11155111 (Sepolia)".
+
+# 7. Lưu địa chỉ Sepolia vào git
+git add ignition/deployments/chain-11155111 frontend/src/contracts.json
+git commit -m "Deploy Sepolia"
+```
+
+Sau bước 6, mở web (`npm run dev` trong `frontend/`), bấm **Chuyển sang Sepolia** là dùng được trên testnet;
+mã giao dịch trên web sẽ là link tới sepolia.etherscan.io.
+
 ## Cấu trúc
 
 | Đường dẫn | Nội dung |
@@ -82,6 +144,7 @@ Settings → Advanced → **Clear activity tab data** để tránh lỗi "nonce 
 | `scripts/lib/pools.ts` | Số liệu các quỹ (dùng chung cho deploy và seed) |
 | `scripts/seed.ts` | Nạp thanh khoản, in tỷ giá |
 | `scripts/demo-send.ts` | Gửi thử 100.000 vJPY → vVND, in báo giá, gas, mã giao dịch |
+| `scripts/check-balance.ts` | In ví deploy, số dư ETH, ước tính gas deploy + seed; thiếu tiền thì dừng |
 | `scripts/export-frontend.ts` | Ghi ABI + địa chỉ (theo chainId) ra `frontend/src/contracts.json` |
 | `frontend/src/main.js` | Giao diện: ví, faucet, chuyển tiền, lịch sử, quản trị |
 | `frontend/src/format.js` | Định dạng số kiểu Việt Nam (17.206.650,27) |

@@ -12,8 +12,12 @@ const esc = (s) =>
 const eth = window.ethereum; // MetaMask gắn object này vào trang
 const ONE = 10n ** 18n; // 1 token = 10^18 đơn vị nhỏ nhất
 
-// Mạng đích cho nút "Chuyển mạng" (khi build bản Sepolia: VITE_CHAIN_ID=11155111)
-const TARGET_CHAIN_ID = Number(import.meta.env.VITE_CHAIN_ID || Object.keys(config.chains)[0]);
+// config.networks: các mạng hỗ trợ (31337, 11155111) – có nút "Chuyển sang ..."
+// config.chains:   các mạng đã deploy contract (có địa chỉ FXHub, token)
+const NETWORKS = Object.values(config.networks);
+
+// Số block tối đa mỗi lần đọc event (RPC công cộng thường giới hạn 10.000)
+const LOG_CHUNK = 10_000;
 
 // Trạng thái hiện tại của trang
 const state = {
@@ -68,9 +72,9 @@ async function connect() {
   await init();
 }
 
-async function switchNetwork() {
-  const c = config.chains[TARGET_CHAIN_ID];
-  const chainIdHex = "0x" + TARGET_CHAIN_ID.toString(16);
+async function switchNetwork(chainId) {
+  const c = config.networks[chainId];
+  const chainIdHex = "0x" + Number(chainId).toString(16);
   try {
     await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: chainIdHex }] });
   } catch (e) {
@@ -98,25 +102,34 @@ function hideApp() {
   for (const p of ["wallet", "send", "history", "admin"]) $(`panel-${p}`).hidden = true;
 }
 
+// Nút "Chuyển sang ..." cho mọi mạng hỗ trợ, trừ mạng đang dùng
+function renderSwitchButtons(currentChainId, wrongNetwork) {
+  $("network-switch").innerHTML = NETWORKS.filter((n) => n.chainId !== currentChainId)
+    .map(
+      (n) =>
+        `<button class="btn small ${wrongNetwork ? "warn" : ""}" data-switch="${n.chainId}">Chuyển sang ${esc(n.name)}</button>`,
+    )
+    .join("");
+}
+
 function showDisconnected() {
   hideApp();
   $("intro").hidden = false;
   $("btn-connect").hidden = false;
-  $("btn-switch").hidden = true;
+  $("network-switch").innerHTML = "";
   $("account-badge").hidden = true;
   $("network-badge").hidden = true;
 }
 
 function showWrongNetwork(chainId) {
   hideApp();
-  const target = config.chains[TARGET_CHAIN_ID];
   const badge = $("network-badge");
   badge.hidden = false;
   badge.className = "badge bad";
   badge.textContent = `Sai mạng (chain ${chainId})`;
-  $("btn-switch").hidden = false;
-  $("btn-switch").textContent = `Chuyển sang ${target.name}`;
-  showMessage(`MetaMask đang ở mạng khác. Bấm "Chuyển sang ${target.name}" để tiếp tục.`, "error");
+  renderSwitchButtons(chainId, true);
+  const names = NETWORKS.map((n) => n.name).join(" hoặc ");
+  showMessage(`MetaMask đang ở mạng không được hỗ trợ. Hãy bấm nút chuyển sang ${names}.`, "error");
 }
 
 // Đọc lại toàn bộ trạng thái: khi tải trang, khi kết nối, khi đổi tài khoản
@@ -135,14 +148,26 @@ async function init() {
   $("account-badge").hidden = false;
   $("account-badge").textContent = shortAddr(state.account);
 
-  state.chain = config.chains[chainId] ?? null;
-  if (!state.chain) return showWrongNetwork(chainId);
+  const network = config.networks[chainId];
+  if (!network) return showWrongNetwork(chainId);
 
-  $("btn-switch").hidden = true;
+  renderSwitchButtons(chainId, false);
   const badge = $("network-badge");
   badge.hidden = false;
   badge.className = "badge";
-  badge.textContent = state.chain.name;
+  badge.textContent = network.name;
+
+  // Mạng được hỗ trợ nhưng chưa deploy contract lên đó
+  state.chain = config.chains[chainId] ?? null;
+  if (!state.chain) {
+    hideApp();
+    showMessage(
+      `Chưa có contract trên mạng ${network.name}. Hãy deploy rồi chạy export-frontend (xem README), ` +
+        `hoặc chuyển sang mạng khác.`,
+      "error",
+    );
+    return;
+  }
 
   // Node local vừa khởi động lại thì contract cũ không còn
   if ((await state.provider.getCode(state.chain.hub)) === "0x") {
@@ -444,19 +469,29 @@ async function send(ev) {
 
 // ───────────────────────── f. Lịch sử (đọc event Remittance) ─────────────────────────
 
+let historySeq = 0; // bấm Làm mới khi đang tải thì bỏ lượt tải cũ
+
 async function loadHistory() {
+  const seq = ++historySeq;
   const box = $("history");
   box.innerHTML = `<div class="empty">Đang tải…</div>`;
   const hub = state.hub;
-  const fromBlock = state.chain.deployBlock;
+  const firstBlock = state.chain.deployBlock;
+  const lastBlock = await state.provider.getBlockNumber();
 
-  // 2 bộ lọc: ví là người gửi, hoặc ví là người nhận
-  const [sent, received] = await Promise.all([
-    hub.queryFilter(hub.filters.Remittance(state.account), fromBlock),
-    hub.queryFilter(hub.filters.Remittance(null, state.account), fromBlock),
-  ]);
+  // Đọc từng đoạn tối đa LOG_CHUNK block, mỗi đoạn 2 bộ lọc: ví là người gửi, hoặc là người nhận
   const unique = new Map();
-  for (const e of [...sent, ...received]) unique.set(`${e.transactionHash}-${e.index}`, e);
+  for (let start = firstBlock; start <= lastBlock; start += LOG_CHUNK) {
+    const end = Math.min(start + LOG_CHUNK - 1, lastBlock);
+    const [sent, received] = await Promise.all([
+      hub.queryFilter(hub.filters.Remittance(state.account), start, end),
+      hub.queryFilter(hub.filters.Remittance(null, state.account), start, end),
+    ]);
+    if (seq !== historySeq) return;
+    for (const e of [...sent, ...received]) unique.set(`${e.transactionHash}-${e.index}`, e);
+    const pct = Math.round(((end - firstBlock + 1) / (lastBlock - firstBlock + 1)) * 100);
+    box.innerHTML = `<div class="empty">Đang tải… ${pct}% (block ${end.toLocaleString("vi-VN")})</div>`;
+  }
   const events = [...unique.values()].sort((a, b) => b.blockNumber - a.blockNumber || b.index - a.index);
 
   if (events.length === 0) {
@@ -471,6 +506,7 @@ async function loadHistory() {
       times.set(n, (await state.provider.getBlock(n)).timestamp);
     }),
   );
+  if (seq !== historySeq) return;
 
   const sym = (addr) => tokenByAddress(addr)?.symbol ?? shortAddr(addr);
   box.innerHTML = events
@@ -614,7 +650,10 @@ async function addLiquidity(ev) {
 // ───────────────────────── Gắn sự kiện ─────────────────────────
 
 $("btn-connect").onclick = safe(connect);
-$("btn-switch").onclick = safe(switchNetwork);
+$("network-switch").onclick = (e) => {
+  const chainId = e.target.closest("[data-switch]")?.dataset.switch;
+  if (chainId) safe(switchNetwork)(chainId);
+};
 $("tabs").onclick = (e) => {
   const tab = e.target.closest("[data-tab]")?.dataset.tab;
   if (tab) showTab(tab);

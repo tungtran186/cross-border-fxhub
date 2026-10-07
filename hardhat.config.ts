@@ -30,11 +30,19 @@ export default defineConfig({
       chainType: "l1",
       url: "http://127.0.0.1:8545",
     },
+    // Testnet Sepolia (chainId 11155111). Bí mật lấy từ keystore khi chạy,
+    // chỉ hỏi mật khẩu khi lệnh thật sự dùng tới mạng này.
     sepolia: {
       type: "http",
       chainType: "l1",
       url: configVariable("SEPOLIA_RPC_URL"),
       accounts: [configVariable("SEPOLIA_PRIVATE_KEY")],
+    },
+  },
+  // Xác minh mã nguồn trên sepolia.etherscan.io
+  verify: {
+    etherscan: {
+      apiKey: configVariable("ETHERSCAN_API_KEY"),
     },
   },
 });

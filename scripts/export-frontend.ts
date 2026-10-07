@@ -1,13 +1,15 @@
 // Xuất ABI + địa chỉ contract cho frontend → frontend/src/contracts.json
 // Đọc mọi bản deploy trong ignition/deployments/chain-<chainId>/ (không gõ tay địa chỉ).
 // Chạy: npx hardhat run scripts/export-frontend.ts   (sau mỗi lần deploy)
+// Script chỉ đọc file trên máy, không kết nối mạng nào nên không hỏi mật khẩu keystore.
 import { readFile, readdir, writeFile, mkdir } from "node:fs/promises";
 
 const MODULE = "CrossBorderModule";
 const SYMBOLS = ["vUSD", "vVND", "vJPY", "vKRW", "vTWD"];
 const OUT_FILE = "frontend/src/contracts.json";
 
-// Thông tin mạng để frontend gọi wallet_addEthereumChain khi MetaMask chưa có mạng này
+// Các mạng frontend hỗ trợ (có nút "Chuyển sang ..."), kể cả khi chưa deploy lên đó.
+// rpcUrl là RPC công cộng, chỉ dùng cho wallet_addEthereumChain; KHÔNG dùng SEPOLIA_RPC_URL riêng của bạn.
 const CHAIN_INFO: Record<string, { name: string; rpcUrl: string; explorer: string | null }> = {
   "31337": { name: "Hardhat Local", rpcUrl: "http://127.0.0.1:8545", explorer: null },
   "11155111": { name: "Sepolia", rpcUrl: "https://ethereum-sepolia-rpc.publicnode.com", explorer: "https://sepolia.etherscan.io" },
@@ -52,6 +54,14 @@ if (Object.keys(chains).length === 0) throw new Error("Chưa có bản deploy n�
 await mkdir("frontend/src", { recursive: true });
 await writeFile(
   OUT_FILE,
-  JSON.stringify({ abi: { FXHub: await abiOf("FXHub"), StableToken: await abiOf("StableToken") }, chains }, null, 2),
+  JSON.stringify(
+    {
+      abi: { FXHub: await abiOf("FXHub"), StableToken: await abiOf("StableToken") },
+      networks: Object.fromEntries(Object.entries(CHAIN_INFO).map(([id, info]) => [id, { chainId: Number(id), ...info }])),
+      chains,
+    },
+    null,
+    2,
+  ),
 );
 console.log(`Đã ghi ${OUT_FILE}`);
