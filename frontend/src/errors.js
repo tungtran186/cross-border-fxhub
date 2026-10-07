@@ -1,0 +1,72 @@
+// Dịch lỗi từ MetaMask / contract sang câu tiếng Việt dễ hiểu
+import { Interface } from "ethers";
+import { fmtAmount, fmtTime } from "./format.js";
+
+let errorInterface = null;
+
+// Gộp các "custom error" của FXHub và StableToken để giải mã dữ liệu lỗi trả về
+export function initErrors(abi) {
+  const seen = new Set();
+  const fragments = [...abi.FXHub, ...abi.StableToken].filter((f) => {
+    if (f.type !== "error" || seen.has(f.name)) return false;
+    seen.add(f.name);
+    return true;
+  });
+  errorInterface = new Interface(fragments);
+}
+
+// Tìm chuỗi dữ liệu lỗi (0x...) nằm sâu trong object lỗi của ethers/MetaMask
+function findRevertData(err, depth = 0) {
+  if (!err || typeof err !== "object" || depth > 5) return null;
+  if (typeof err.data === "string" && err.data.startsWith("0x") && err.data.length >= 10) return err.data;
+  for (const key of ["data", "error", "info", "cause"]) {
+    const found = findRevertData(err[key], depth + 1);
+    if (found) return found;
+  }
+  return null;
+}
+
+function decodeRevert(err) {
+  if (err?.revert?.name) return err.revert;
+  const data = findRevertData(err);
+  if (!data || !errorInterface) return null;
+  try {
+    return errorInterface.parseError(data);
+  } catch {
+    return null;
+  }
+}
+
+const REVERT_MESSAGES = {
+  SlippageExceeded: (a) =>
+    `Giá vừa biến động: chỉ nhận được ${fmtAmount(a[0])}, thấp hơn mức tối thiểu ${fmtAmount(a[1])}. ` +
+    `Hãy thử lại hoặc tăng ô "Trượt giá chấp nhận".`,
+  EnforcedPause: () => "Hệ thống đang tạm dừng để bảo trì. Vui lòng thử lại sau.",
+  ExpectedPause: () => "Hệ thống đang hoạt động bình thường (không ở trạng thái tạm dừng).",
+  ERC20InsufficientBalance: (a) => `Không đủ số dư: ví chỉ có ${fmtAmount(a[1])}, cần ${fmtAmount(a[2])}.`,
+  ERC20InsufficientAllowance: () => "Chưa cấp đủ hạn mức (approve) cho sàn. Hãy bấm Gửi lại.",
+  FaucetCooldown: (a) => `Ví này đã nhận coin thử nghiệm trong 24 giờ qua. Xin lại lúc ${fmtTime(a[0])}.`,
+  NotListed: () => "Đồng tiền này chưa được niêm yết trên sàn.",
+  AlreadyListed: () => "Đồng tiền này đã được niêm yết rồi.",
+  SameToken: () => "Đồng gửi và đồng nhận phải khác nhau.",
+  ZeroAddress: () => "Địa chỉ người nhận không hợp lệ.",
+  ZeroAmount: () => "Số tiền phải lớn hơn 0.",
+  InsufficientLiquidity: () => "Quỹ không đủ thanh khoản cho giao dịch này. Hãy thử số tiền nhỏ hơn.",
+  OwnableUnauthorizedAccount: () => "Chỉ quản trị viên (owner) mới làm được việc này.",
+};
+
+export function friendlyError(err) {
+  // Người dùng bấm "Từ chối" trong MetaMask
+  if (err?.code === "ACTION_REJECTED" || err?.code === 4001 || err?.info?.error?.code === 4001) {
+    return "Bạn đã từ chối yêu cầu trong MetaMask.";
+  }
+  if (err?.code === -32002) return "MetaMask đang có một yêu cầu chờ xử lý. Hãy mở MetaMask để xem.";
+  if (err?.code === "NETWORK_ERROR") return "Ví vừa đổi mạng. Hãy chọn đúng mạng rồi thử lại.";
+  if (err?.code === "INSUFFICIENT_FUNDS") return "Ví không đủ ETH để trả phí gas.";
+
+  const revert = decodeRevert(err);
+  if (revert && REVERT_MESSAGES[revert.name]) return REVERT_MESSAGES[revert.name](revert.args);
+  if (revert) return `Contract từ chối giao dịch (${revert.name}).`;
+
+  return err?.shortMessage || err?.message || String(err);
+}

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chuyển tiền xuyên biên giới</title>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <strong>FXHub</strong>
+        <span class="muted">Chuyển tiền xuyên biên giới · testnet</span>
+      </div>
+      <div class="wallet">
+        <span id="network-badge" class="badge" hidden></span>
+        <span id="account-badge" class="badge" hidden></span>
+        <button id="btn-connect" class="btn primary">Kết nối ví</button>
+        <button id="btn-switch" class="btn warn" hidden>Chuyển mạng</button>
+      </div>
+    </header>
+
+    <main>
+      <div id="message" class="message" hidden></div>
+
+      <section id="intro" class="card">
+        <h2>Chào bạn 👋</h2>
+        <p>
+          Gửi vJPY, vKRW, vTWD hoặc vUSD, người nhận ở Việt Nam nhận vVND trong <b>một giao dịch</b>.
+          Đây là tiền giả lập trên mạng thử nghiệm, không phải tiền thật.
+        </p>
+        <p class="muted">Bấm <b>Kết nối ví</b> ở góc trên để bắt đầu (cần cài MetaMask).</p>
+      </section>
+
+      <nav id="tabs" class="tabs" hidden>
+        <button data-tab="wallet" class="tab active">Ví</button>
+        <button data-tab="send" class="tab">Chuyển tiền</button>
+        <button data-tab="history" class="tab">Lịch sử</button>
+        <button data-tab="admin" class="tab" id="tab-admin" hidden>Quản trị</button>
+      </nav>
+
+      <!-- Tab Ví: số dư + faucet -->
+      <section id="panel-wallet" class="card panel" hidden>
+        <div class="card-head">
+          <h2>Số dư của ví</h2>
+          <button id="btn-refresh" class="btn small">Làm mới</button>
+        </div>
+        <p class="muted" id="eth-balance"></p>
+        <div id="balances" class="rows"></div>
+        <p class="muted small-text">
+          "Nhận coin thử nghiệm": mỗi ví nhận miễn phí 1 lần mỗi 24 giờ cho từng loại coin.
+        </p>
+      </section>
+
+      <!-- Tab Chuyển tiền -->
+      <section id="panel-send" class="card panel" hidden>
+        <h2>Chuyển tiền</h2>
+        <form id="send-form" autocomplete="off">
+          <div class="grid2">
+            <label>Đồng gửi <select id="send-from"></select></label>
+            <label>Đồng nhận <select id="send-to"></select></label>
+          </div>
+          <label>
+            Số tiền gửi <span class="muted" id="send-balance"></span>
+            <input id="send-amount" inputmode="decimal" placeholder="vd: 100.000 hoặc 1,5" />
+          </label>
+          <label>
+            Địa chỉ người nhận
+            <input id="send-recipient" placeholder="0x..." spellcheck="false" />
+          </label>
+          <label class="inline">
+            Trượt giá chấp nhận (%)
+            <input id="send-slippage" inputmode="decimal" value="0,5" class="short" />
+          </label>
+
+          <div id="quote" class="quote" hidden></div>
+
+          <button id="btn-send" type="submit" class="btn primary block">Gửi</button>
+        </form>
+        <div id="send-status" class="status" hidden></div>
+      </section>
+
+      <!-- Tab Lịch sử -->
+      <section id="panel-history" class="card panel" hidden>
+        <div class="card-head">
+          <h2>Lịch sử chuyển tiền</h2>
+          <button id="btn-history" class="btn small">Làm mới</button>
+        </div>
+        <div id="history" class="rows"></div>
+      </section>
+
+      <!-- Tab Quản trị (chỉ owner) -->
+      <section id="panel-admin" class="card panel" hidden>
+        <div class="card-head">
+          <h2>Quản trị sàn</h2>
+          <button id="btn-admin-refresh" class="btn small">Làm mới</button>
+        </div>
+        <div class="pause-row">
+          <span>Trạng thái: <b id="pause-state">…</b></span>
+          <button id="btn-pause" class="btn warn small">…</button>
+        </div>
+
+        <h3>Các quỹ (ghép với vUSD)</h3>
+        <div id="pools" class="rows"></div>
+
+        <h3>Nạp thêm thanh khoản</h3>
+        <form id="liq-form" autocomplete="off">
+          <label>Quỹ <select id="liq-token"></select></label>
+          <div class="grid2">
+            <label><span id="liq-token-label">Số token</span> <input id="liq-amount-token" inputmode="decimal" /></label>
+            <label>Số vUSD <input id="liq-amount-usd" inputmode="decimal" /></label>
+          </div>
+          <p class="muted small-text" id="liq-hint"></p>
+          <button type="submit" id="btn-liq" class="btn primary block">Nạp thanh khoản</button>
+        </form>
+        <div id="admin-status" class="status" hidden></div>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

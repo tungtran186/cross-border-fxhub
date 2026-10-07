@@ -1,5 +1,5 @@
 # Node modules
-/node_modules
+node_modules
 
 # Compilation output
 /dist
@@ -32,3 +32,6 @@
 
 # Ignition deploy lên node local (mất khi tắt node, không cần lưu)
 /ignition/deployments/chain-31337
+
+# Frontend build output
+/frontend/dist

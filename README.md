@@ -47,6 +47,30 @@ Ghi chú:
 - Địa chỉ contract được Ignition ghi vào
   `ignition/deployments/chain-31337/deployed_addresses.json`; các script tự đọc file này.
 
+## Giao diện web (frontend/)
+
+Vite + JavaScript thuần + ethers v6, kết nối MetaMask. Làm sau khi đã chạy node → deploy → seed ở trên.
+
+```shell
+# 4. Xuất ABI + địa chỉ contract cho frontend → frontend/src/contracts.json
+#    (chạy lại mỗi khi deploy lại)
+npx hardhat run scripts/export-frontend.ts
+
+# 5. Lần đầu: cài thư viện cho frontend
+cd frontend
+npm install
+
+# 6. Bật web, mở link http://localhost:5173 trong trình duyệt có MetaMask
+npm run dev
+```
+
+Trong MetaMask cần có mạng Hardhat Local (RPC `http://127.0.0.1:8545`, chain ID `31337`)
+và import tài khoản test (khoá in ra khi chạy `npx hardhat node`). Tab **Quản trị** chỉ hiện với
+tài khoản #0 (owner, người deploy).
+
+Khi tắt rồi bật lại node: chạy lại bước 1, 2, 4 rồi tải lại trang, và trong MetaMask chọn
+Settings → Advanced → **Clear activity tab data** để tránh lỗi "nonce too high".
+
 ## Cấu trúc
 
 | Đường dẫn | Nội dung |
@@ -58,3 +82,7 @@ Ghi chú:
 | `scripts/lib/pools.ts` | Số liệu các quỹ (dùng chung cho deploy và seed) |
 | `scripts/seed.ts` | Nạp thanh khoản, in tỷ giá |
 | `scripts/demo-send.ts` | Gửi thử 100.000 vJPY → vVND, in báo giá, gas, mã giao dịch |
+| `scripts/export-frontend.ts` | Ghi ABI + địa chỉ (theo chainId) ra `frontend/src/contracts.json` |
+| `frontend/src/main.js` | Giao diện: ví, faucet, chuyển tiền, lịch sử, quản trị |
+| `frontend/src/format.js` | Định dạng số kiểu Việt Nam (17.206.650,27) |
+| `frontend/src/errors.js` | Dịch lỗi MetaMask/contract sang tiếng Việt |
