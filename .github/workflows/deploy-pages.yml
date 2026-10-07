@@ -1,0 +1,57 @@
+# Build thư mục frontend/ và đưa lên GitHub Pages mỗi khi đẩy code lên nhánh main.
+# Bản build chỉ dùng mạng Sepolia (Hardhat Local chỉ hiện khi chạy npm run dev).
+name: Deploy frontend lên GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # cho phép bấm chạy tay trong tab Actions
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Chỉ chạy 1 lần deploy tại một thời điểm
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Cài thư viện
+        run: npm ci
+
+      - name: Build (base = /<tên-repo>/)
+        run: npm run build
+        env:
+          VITE_BASE: /${{ github.event.repository.name }}/
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

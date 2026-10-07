@@ -133,6 +133,26 @@ git commit -m "Deploy Sepolia"
 Sau bước 6, mở web (`npm run dev` trong `frontend/`), bấm **Chuyển sang Sepolia** là dùng được trên testnet;
 mã giao dịch trên web sẽ là link tới sepolia.etherscan.io.
 
+## Đưa web lên GitHub Pages
+
+Workflow [.github/workflows/deploy-pages.yml](.github/workflows/deploy-pages.yml) tự build thư mục
+`frontend/` và đưa lên GitHub Pages mỗi khi đẩy code lên nhánh `main`.
+
+- Bản build chỉ dùng mạng **Sepolia**; Hardhat Local chỉ hiện khi chạy `npm run dev`.
+- Đường dẫn gốc của Vite (`base`) tự đặt theo tên repo: trang nằm ở
+  `https://<tên-tài-khoản>.github.io/<tên-repo>/`.
+- Địa chỉ contract lấy từ `frontend/src/contracts.json` (đã commit) → deploy lại contract thì chạy
+  `export-frontend` rồi commit file này.
+
+Bật lần đầu: trên GitHub vào **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+
+## Vì sao gas trên Sepolia cao hơn trên máy?
+
+Mạng Hardhat trên máy giả lập hardfork **Osaka** (giống Ethereum mainnet hiện nay). Sepolia đã lên
+**Glamsterdam** từ 6/10/2026; bản nâng cấp này tăng giá gas cho việc **tạo dữ liệu mới** trên blockchain
+(EIP-8037) và **đọc/ghi dữ liệu** (EIP-8038). Ví dụ `approve` lần đầu (tạo ô nhớ hạn mức mới):
+khoảng 47.000 gas trên máy, khoảng 128.000 gas trên Sepolia. Contract không đổi, chỉ "biểu giá" của mạng khác.
+
 ## Cấu trúc
 
 | Đường dẫn | Nội dung |

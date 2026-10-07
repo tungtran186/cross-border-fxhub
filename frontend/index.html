@@ -31,6 +31,40 @@
         <p class="muted">Bấm <b>Kết nối ví</b> ở góc trên để bắt đầu (cần cài MetaMask).</p>
       </section>
 
+      <!-- Hướng dẫn cho người mới: mở sẵn khi chưa kết nối, thu gọn khi đã dùng được -->
+      <details id="guide" class="card guide" open>
+        <summary>Hướng dẫn cho người mới</summary>
+        <p class="warn-note">
+          ⚠️ Đây là <b>tiền thử nghiệm</b> trên mạng Sepolia (testnet), <b>không có giá trị</b>, không mua bán được.
+          Không bao giờ nhập cụm từ khôi phục (12 từ bí mật) của ví vào bất kỳ trang web nào.
+        </p>
+        <ol>
+          <li>
+            <b>Cài MetaMask</b> – ví điện tử dạng tiện ích trình duyệt:
+            <a href="https://metamask.io/download" target="_blank" rel="noopener">metamask.io/download</a>.
+            Tạo ví mới theo hướng dẫn của MetaMask.
+          </li>
+          <li>
+            Bấm <b>Kết nối ví</b>, rồi bấm <b>Chuyển sang Sepolia</b> (mạng thử nghiệm của Ethereum).
+          </li>
+          <li>
+            <b>Xin SepoliaETH miễn phí</b> để trả phí giao dịch (phí gas):
+            <a id="faucet-link" target="_blank" rel="noopener">Google Cloud Sepolia Faucet</a>
+            → dán địa chỉ ví của bạn → bấm nhận. Cần đăng nhập Google.
+          </li>
+          <li>Vào tab <b>Ví</b>, bấm <b>Nhận coin thử nghiệm</b> để có vJPY, vKRW, vTWD, vUSD (mỗi loại 1 lần/24 giờ).</li>
+          <li>Vào tab <b>Chuyển tiền</b>: chọn đồng gửi, đồng nhận, số tiền, địa chỉ người nhận rồi bấm <b>Gửi</b>.</li>
+        </ol>
+        <h3>Trên điện thoại</h3>
+        <p>
+          Safari/Chrome trên điện thoại không có MetaMask. Hãy cài <b>app MetaMask</b>, mở app → biểu tượng
+          <b>trình duyệt</b> (Explore / Browser) → dán link trang này vào thanh địa chỉ.
+        </p>
+        <p id="mobile-open" hidden>
+          <a id="mm-app-link" class="btn primary block">Mở trang này trong app MetaMask</a>
+        </p>
+      </details>
+
       <nav id="tabs" class="tabs" hidden>
         <button data-tab="wallet" class="tab active">Ví</button>
         <button data-tab="send" class="tab">Chuyển tiền</button>

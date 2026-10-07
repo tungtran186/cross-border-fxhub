@@ -55,18 +55,50 @@ const REVERT_MESSAGES = {
   OwnableUnauthorizedAccount: () => "Chỉ quản trị viên (owner) mới làm được việc này.",
 };
 
+// Lỗi do chính trang tạo ra, câu chữ đã là tiếng Việt → hiện nguyên văn
+export class UserError extends Error {}
+
+// Gom mọi đoạn chữ trong object lỗi để dò từ khoá (nonce, network changed...)
+function allText(err) {
+  const parts = [err?.message, err?.shortMessage, err?.info?.error?.message, err?.error?.message];
+  return parts.filter(Boolean).join(" ").toLowerCase();
+}
+
 export function friendlyError(err) {
+  if (err instanceof UserError) return err.message;
+
+  const code = err?.code;
+  const text = allText(err);
+
   // Người dùng bấm "Từ chối" trong MetaMask
-  if (err?.code === "ACTION_REJECTED" || err?.code === 4001 || err?.info?.error?.code === 4001) {
+  if (code === "ACTION_REJECTED" || code === 4001 || err?.info?.error?.code === 4001) {
     return "Bạn đã từ chối yêu cầu trong MetaMask.";
   }
-  if (err?.code === -32002) return "MetaMask đang có một yêu cầu chờ xử lý. Hãy mở MetaMask để xem.";
-  if (err?.code === "NETWORK_ERROR") return "Ví vừa đổi mạng. Hãy chọn đúng mạng rồi thử lại.";
-  if (err?.code === "INSUFFICIENT_FUNDS") return "Ví không đủ ETH để trả phí gas.";
+  if (code === -32002) return "MetaMask đang có một yêu cầu chờ xử lý. Hãy mở MetaMask để xem.";
+  if (code === "INSUFFICIENT_FUNDS" || text.includes("insufficient funds")) {
+    return "Ví không đủ ETH để trả phí gas. Trên Sepolia, hãy xin SepoliaETH miễn phí ở faucet (xem phần Hướng dẫn).";
+  }
+  if (text.includes("network changed")) return "Ví vừa đổi mạng. Hãy chọn đúng mạng rồi thử lại.";
+  if (text.includes("nonce")) {
+    return "Lịch sử giao dịch trong MetaMask bị lệch (nonce). Vào MetaMask → Settings → Advanced → Clear activity tab data rồi thử lại.";
+  }
 
+  // Contract từ chối và có trả lý do (custom error)
   const revert = decodeRevert(err);
   if (revert && REVERT_MESSAGES[revert.name]) return REVERT_MESSAGES[revert.name](revert.args);
   if (revert) return `Contract từ chối giao dịch (${revert.name}).`;
 
-  return err?.shortMessage || err?.message || String(err);
+  if (code === "CALL_EXCEPTION") {
+    return "Contract từ chối giao dịch mà không nêu lý do. Hãy kiểm tra lại mạng đang chọn và số liệu đã nhập.";
+  }
+  if (code === "BAD_DATA") {
+    return "Không đọc được dữ liệu từ contract. Có thể MetaMask đang ở sai mạng hoặc contract chưa được deploy trên mạng này.";
+  }
+  if (["NETWORK_ERROR", "SERVER_ERROR", "TIMEOUT", "UNKNOWN_ERROR"].includes(code) || code === -32603) {
+    return "Không kết nối được tới mạng blockchain (hoặc mạng đang chậm). Kiểm tra Internet rồi thử lại sau ít phút.";
+  }
+
+  // Lỗi chưa có trong danh sách: vẫn báo tiếng Việt, kèm chi tiết kỹ thuật ngắn để báo lại cho nhóm
+  const detail = (err?.shortMessage || err?.message || String(err)).slice(0, 160);
+  return `Đã xảy ra lỗi không mong muốn. Hãy tải lại trang và thử lại. (Chi tiết kỹ thuật: ${detail})`;
 }

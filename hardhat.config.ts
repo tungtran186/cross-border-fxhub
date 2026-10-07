@@ -24,6 +24,10 @@ export default defineConfig({
       type: "edr-simulated",
       chainType: "l1",
     },
+    // Lưu ý hardfork: mạng giả lập của Hardhat dùng "osaka" (giống Ethereum mainnet hiện nay).
+    // Sepolia đã lên Glamsterdam ("amsterdam") từ 6/10/2026, giá gas ghi dữ liệu mới cao hơn,
+    // nên cùng giao dịch sẽ tốn nhiều gas hơn trên Sepolia. Hardhat mới hỗ trợ "amsterdam"
+    // ở mức thử nghiệm (số liệu chưa khớp Sepolia) nên giữ mặc định "osaka".
     // Node chạy bằng `npx hardhat node` trên máy mình (chainId 31337)
     localhost: {
       type: "http",

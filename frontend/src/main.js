@@ -2,7 +2,7 @@ import "./style.css";
 import { BrowserProvider, Contract, getAddress, isAddress } from "ethers";
 import config from "./contracts.json";
 import { fmtAmount, parseAmount, fmtPct, fmtTime, shortAddr } from "./format.js";
-import { friendlyError, initErrors } from "./errors.js";
+import { friendlyError, initErrors, UserError } from "./errors.js";
 
 initErrors(config.abi);
 
@@ -14,7 +14,18 @@ const ONE = 10n ** 18n; // 1 token = 10^18 đơn vị nhỏ nhất
 
 // config.networks: các mạng hỗ trợ (31337, 11155111) – có nút "Chuyển sang ..."
 // config.chains:   các mạng đã deploy contract (có địa chỉ FXHub, token)
-const NETWORKS = Object.values(config.networks);
+// Bản build đưa lên mạng chỉ dùng Sepolia; Hardhat Local chỉ hiện khi chạy `npm run dev`.
+const LOCAL_CHAIN_ID = 31337;
+const SHOW_LOCAL = import.meta.env.DEV;
+const NETWORKS = Object.values(config.networks)
+  .filter((n) => SHOW_LOCAL || n.chainId !== LOCAL_CHAIN_ID)
+  .sort((a, b) => (a.chainId === LOCAL_CHAIN_ID) - (b.chainId === LOCAL_CHAIN_ID)); // Sepolia đứng trước
+const networkOf = (chainId) => NETWORKS.find((n) => n.chainId === chainId) ?? null;
+
+const FAUCET_URL = "https://cloud.google.com/application/web3/faucet/ethereum/sepolia";
+const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+// Link mở trang này bên trong trình duyệt của app MetaMask (dùng trên điện thoại)
+const metamaskAppLink = `https://metamask.app.link/dapp/${location.host}${location.pathname}`;
 
 // Số block tối đa mỗi lần đọc event (RPC công cộng thường giới hạn 10.000)
 const LOG_CHUNK = 10_000;
@@ -65,7 +76,13 @@ const safe = (fn) => (...args) => fn(...args).catch((e) => showMessage(friendlyE
 
 async function connect() {
   if (!eth) {
-    showMessage("Không tìm thấy MetaMask. Hãy cài tiện ích MetaMask cho trình duyệt rồi tải lại trang.", "error");
+    showMessage(
+      isMobile
+        ? 'Trình duyệt này không có MetaMask. Hãy bấm "Mở trong app MetaMask" trong phần Hướng dẫn.'
+        : "Không tìm thấy MetaMask. Hãy cài tiện ích MetaMask cho trình duyệt (xem phần Hướng dẫn) rồi tải lại trang.",
+      "error",
+    );
+    $("guide").open = true;
     return;
   }
   await eth.request({ method: "eth_requestAccounts" }); // mở MetaMask xin quyền kết nối
@@ -97,9 +114,14 @@ async function switchNetwork(chainId) {
   // Đổi mạng xong MetaMask phát sự kiện chainChanged → trang tự tải lại
 }
 
+// Ẩn các tab và quên kết nối cũ, để không hàm nào đọc số dư/lịch sử khi chưa sẵn sàng
 function hideApp() {
   $("tabs").hidden = true;
   for (const p of ["wallet", "send", "history", "admin"]) $(`panel-${p}`).hidden = true;
+  state.hub = null;
+  state.tokens = [];
+  state.isOwner = false;
+  $("guide").open = true; // chưa dùng được thì mở sẵn hướng dẫn
 }
 
 // Nút "Chuyển sang ..." cho mọi mạng hỗ trợ, trừ mạng đang dùng
@@ -148,7 +170,7 @@ async function init() {
   $("account-badge").hidden = false;
   $("account-badge").textContent = shortAddr(state.account);
 
-  const network = config.networks[chainId];
+  const network = networkOf(chainId);
   if (!network) return showWrongNetwork(chainId);
 
   renderSwitchButtons(chainId, false);
@@ -190,6 +212,7 @@ async function init() {
   state.isOwner = getAddress(await state.hub.owner()) === state.account;
 
   showMessage("");
+  $("guide").open = false; // đã sẵn sàng thì thu gọn hướng dẫn
   $("tabs").hidden = false;
   $("tab-admin").hidden = !state.isOwner;
   if (!state.isOwner && state.tab === "admin") state.tab = "wallet";
@@ -206,9 +229,13 @@ const loaders = {
   admin: () => loadAdmin(),
 };
 
+// Chỉ chạy khi đã kết nối ví đúng mạng (có contract FXHub); chưa thì bỏ qua
+const whenConnected = (fn) => (...args) => (state.hub ? fn(...args) : Promise.resolve());
+
 function showTab(tab) {
   state.tab = tab;
   for (const btn of document.querySelectorAll(".tab")) btn.classList.toggle("active", btn.dataset.tab === tab);
+  if (!state.hub) return; // chưa kết nối: không đọc số dư/lịch sử
   for (const p of Object.keys(loaders)) $(`panel-${p}`).hidden = p !== tab;
   safe(loaders[tab])();
 }
@@ -312,7 +339,7 @@ function slippageBps() {
 
 async function poolOf(t) {
   const p = await state.hub.pools(t.address);
-  if (p.reserveToken === 0n || p.reserveUsd === 0n) throw new Error(`Quỹ ${t.symbol} chưa có thanh khoản.`);
+  if (p.reserveToken === 0n || p.reserveUsd === 0n) throw new UserError(`Quỹ ${t.symbol} chưa có thanh khoản.`);
   return { token: p.reserveToken, usd: p.reserveUsd };
 }
 
@@ -409,15 +436,15 @@ async function send(ev) {
   btn.disabled = true;
   try {
     // Kiểm tra trước để báo lỗi dễ hiểu, khỏi tốn công ký
-    if (from === to) throw new Error("Đồng gửi và đồng nhận phải khác nhau.");
-    if (!amount) throw new Error("Hãy nhập số tiền hợp lệ, lớn hơn 0.");
-    if (!isAddress(recipientText)) throw new Error("Địa chỉ người nhận không hợp lệ (dạng 0x… gồm 42 ký tự).");
-    if (bps === null) throw new Error("Trượt giá chấp nhận phải từ 0 đến 50%.");
+    if (from === to) throw new UserError("Đồng gửi và đồng nhận phải khác nhau.");
+    if (!amount) throw new UserError("Hãy nhập số tiền hợp lệ, lớn hơn 0.");
+    if (!isAddress(recipientText)) throw new UserError("Địa chỉ người nhận không hợp lệ (dạng 0x… gồm 42 ký tự).");
+    if (bps === null) throw new UserError("Trượt giá chấp nhận phải từ 0 đến 50%.");
     const recipient = getAddress(recipientText);
-    if (await state.hub.paused()) throw new Error("Hệ thống đang tạm dừng để bảo trì. Vui lòng thử lại sau.");
+    if (await state.hub.paused()) throw new UserError("Hệ thống đang tạm dừng để bảo trì. Vui lòng thử lại sau.");
     const balance = await from.contract.balanceOf(state.account);
     if (balance < amount) {
-      throw new Error(`Không đủ số dư: ví có ${fmtAmount(balance)} ${from.symbol}, cần ${fmtAmount(amount)} ${from.symbol}.`);
+      throw new UserError(`Không đủ số dư: ví có ${fmtAmount(balance)} ${from.symbol}, cần ${fmtAmount(amount)} ${from.symbol}.`);
     }
 
     // Bước 1: approve = cho phép sàn rút đúng số tiền này từ ví (chỉ khi hạn mức hiện tại chưa đủ)
@@ -608,8 +635,8 @@ async function addLiquidity(ev) {
   try {
     const amountToken = parseAmount($("liq-amount-token").value || "0");
     const amountUsd = parseAmount($("liq-amount-usd").value || "0");
-    if (amountToken === null || amountUsd === null) throw new Error("Số tiền không hợp lệ. Gõ kiểu 100.000 hoặc 1,5.");
-    if (amountToken === 0n && amountUsd === 0n) throw new Error("Hãy nhập số tiền cần nạp.");
+    if (amountToken === null || amountUsd === null) throw new UserError("Số tiền không hợp lệ. Gõ kiểu 100.000 hoặc 1,5.");
+    if (amountToken === 0n && amountUsd === 0n) throw new UserError("Hãy nhập số tiền cần nạp.");
 
     // Kiểm tra số dư và approve từng token
     for (const [tok, amt] of [
@@ -618,7 +645,7 @@ async function addLiquidity(ev) {
     ]) {
       if (amt === 0n) continue;
       const balance = await tok.contract.balanceOf(state.account);
-      if (balance < amt) throw new Error(`Không đủ số dư: ví có ${fmtAmount(balance)} ${tok.symbol}, cần ${fmtAmount(amt)}.`);
+      if (balance < amt) throw new UserError(`Không đủ số dư: ví có ${fmtAmount(balance)} ${tok.symbol}, cần ${fmtAmount(amt)}.`);
       if ((await tok.contract.allowance(state.account, hubAddr)) < amt) {
         setStatus("admin-status", `Chờ bạn ký <b>approve</b> ${fmtAmount(amt)} ${tok.symbol}…`);
         const tx = await tok.contract.approve(hubAddr, amt);
@@ -659,32 +686,45 @@ $("tabs").onclick = (e) => {
   if (tab) showTab(tab);
 };
 
-$("btn-refresh").onclick = safe(loadBalances);
+$("btn-refresh").onclick = safe(whenConnected(loadBalances));
 $("balances").onclick = (e) => {
   const faucetBtn = e.target.closest("[data-faucet]");
-  if (faucetBtn) return safe(claimFaucet)(faucetBtn.dataset.faucet, faucetBtn);
+  if (faucetBtn) return safe(whenConnected(claimFaucet))(faucetBtn.dataset.faucet, faucetBtn);
   const watchBtn = e.target.closest("[data-watch]");
   if (watchBtn) safe(watchAsset)(watchBtn.dataset.watch);
 };
 
-for (const id of ["send-from", "send-to", "send-amount", "send-slippage"]) $(id).addEventListener("input", scheduleQuote);
-$("send-form").onsubmit = send;
+for (const id of ["send-from", "send-to", "send-amount", "send-slippage"]) $(id).addEventListener("input", whenConnected(async () => scheduleQuote()));
+// Form: luôn chặn tải lại trang, chỉ gửi khi đã kết nối
+const onSubmit = (fn) => (e) => {
+  e.preventDefault();
+  whenConnected(fn)(e);
+};
+$("send-form").onsubmit = onSubmit(send);
 
-$("btn-history").onclick = safe(loadHistory);
+$("btn-history").onclick = safe(whenConnected(loadHistory));
 
-$("btn-admin-refresh").onclick = safe(loadAdmin);
-$("btn-pause").onclick = togglePause;
+$("btn-admin-refresh").onclick = safe(whenConnected(loadAdmin));
+$("btn-pause").onclick = whenConnected(togglePause);
 $("liq-token").onchange = () => {
   updateLiqLabel();
   suggestLiqUsd();
 };
 $("liq-amount-token").addEventListener("input", suggestLiqUsd);
-$("liq-form").onsubmit = addLiquidity;
+$("liq-form").onsubmit = onSubmit(addLiquidity);
 
+// Khung hướng dẫn: link faucet, nút mở trong app MetaMask (chỉ hiện trên điện thoại chưa có MetaMask)
+$("faucet-link").href = FAUCET_URL;
+$("mm-app-link").href = metamaskAppLink;
+$("mobile-open").hidden = !(isMobile && !eth);
+
+// Tải trang: nếu MetaMask đã cho phép trang này từ trước (eth_accounts có địa chỉ) thì tự kết nối
 if (eth) {
   eth.on("accountsChanged", safe(init)); // đổi tài khoản trong MetaMask
   eth.on("chainChanged", () => window.location.reload()); // đổi mạng → tải lại trang cho sạch
   safe(init)();
 } else {
   showDisconnected();
+  // Một số trình duyệt (vd app MetaMask trên điện thoại) gắn MetaMask vào trang muộn hơn → tải lại khi nó sẵn sàng
+  window.addEventListener("ethereum#initialized", () => window.location.reload(), { once: true });
 }
