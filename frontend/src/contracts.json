@@ -1141,6 +1141,36 @@
           "address": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
         }
       ]
+    },
+    "11155111": {
+      "chainId": 11155111,
+      "name": "Sepolia",
+      "rpcUrl": "https://ethereum-sepolia-rpc.publicnode.com",
+      "explorer": "https://sepolia.etherscan.io",
+      "hub": "0x972055580898Dd1A36BaaB51Cb8e0591A8256fC9",
+      "deployBlock": 11862216,
+      "tokens": [
+        {
+          "symbol": "vUSD",
+          "address": "0xb41374F8caa96fA3E6fE55c4b44F2a6D94e1F882"
+        },
+        {
+          "symbol": "vVND",
+          "address": "0x2eF9473804c83A209fEd11d2E577F421d1aBE175"
+        },
+        {
+          "symbol": "vJPY",
+          "address": "0x4AD9F59B9247430A3E2088CB1b70AEFa2f1e8b12"
+        },
+        {
+          "symbol": "vKRW",
+          "address": "0x7ee7DafBaf55b932e0420C98010A40d104106391"
+        },
+        {
+          "symbol": "vTWD",
+          "address": "0xE5Eb244f63cDAbD9faaEB78546884Ff2c62ef8d4"
+        }
+      ]
     }
   }
 }
