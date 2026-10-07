@@ -29,3 +29,6 @@
 
 # Snapshot cheatcodes output
 /snapshots
+
+# Ignition deploy lên node local (mất khi tắt node, không cần lưu)
+/ignition/deployments/chain-31337
