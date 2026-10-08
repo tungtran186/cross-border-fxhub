@@ -491,9 +491,19 @@ input, select {
 .quote dd { margin: 0; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
 .quote .hint { font-weight: 400; color: var(--muted); }
 .quote.error { display: flex; gap: var(--space-2); background: var(--err-bg); border-color: var(--err-border); color: var(--err); }
-.route { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
-.route .step { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 3px; border-radius: 999px; background: var(--soft); border: 1px solid var(--line); font-weight: 600; }
-.route .icon { width: 16px; height: 16px; color: var(--muted); }
+/* Lộ trình luôn 1 hàng; không vừa thì cuộn ngang riêng trong khối này (trang không cuộn ngang) */
+.route {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.route .step { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; white-space: nowrap; padding: 3px 10px 3px 3px; border-radius: 999px; background: var(--soft); border: 1px solid var(--line); font-weight: 600; }
+.route .icon { width: 16px; height: 16px; flex-shrink: 0; color: var(--muted); }
 #btn-send { margin-top: var(--space-4); }
 
 /* ═══════════════════ Thông báo (thẻ có icon) ═══════════════════ */
@@ -612,6 +622,10 @@ input, select {
   .coin-select select { padding: 6px 2px; }
   .quote dl { grid-template-columns: 1fr; gap: 2px; }
   .quote dd { text-align: left; margin-bottom: 8px; }
-  .route { justify-content: flex-start; }
+  .route { justify-content: flex-start; gap: 4px; }
+  /* chip lộ trình nhỏ lại cho vừa 1 hàng */
+  .route .step { gap: 4px; padding: 2px 8px 2px 2px; font-size: 0.8rem; }
+  .route .coin.sm { width: 20px; height: 20px; font-size: 0.65rem; }
+  .route .icon { width: 12px; height: 12px; }
   .btn.small { min-height: 40px; }
 }

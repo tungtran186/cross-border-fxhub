@@ -469,7 +469,7 @@ async function send(ev) {
       throw new UserError(`Không đủ số dư: ví có ${fmtAmount(balance)} ${from.symbol}, cần ${fmtAmount(amount)} ${from.symbol}.`);
     }
 
-    // Bước 1: approve = cho phép sàn rút đúng số tiền này từ ví (chỉ khi hạn mức hiện tại chưa đủ)
+    // Bước 1: approve = cho phép FXHub rút đúng số tiền này từ ví (chỉ khi hạn mức hiện tại chưa đủ)
     const allowance = await from.contract.allowance(state.account, hubAddr);
     const needApprove = allowance < amount;
     if (needApprove) {
@@ -628,7 +628,7 @@ async function togglePause() {
     await tx.wait();
     setStatus(
       "admin-status",
-      paused ? "Đã mở lại sàn." : "Đã tạm dừng sàn. Mọi lệnh gửi tiền sẽ bị chặn cho tới khi mở lại.",
+      paused ? "Đã mở lại hệ thống." : "Đã tạm dừng hệ thống. Mọi lệnh gửi tiền sẽ bị chặn cho tới khi mở lại.",
       "success",
     );
   } catch (e) {
