@@ -133,6 +133,32 @@ git commit -m "Deploy Sepolia"
 Sau bước 6, mở web (`npm run dev` trong `frontend/`), bấm **Chuyển sang Sepolia** là dùng được trên testnet;
 mã giao dịch trên web sẽ là link tới sepolia.etherscan.io.
 
+## Đo số liệu cho tiểu luận (Bước 8)
+
+Số liệu Sepolia ghi vào `data/` (có trong git); chạy thử trên mạng local ghi vào `data/chain-31337/` (bị bỏ qua).
+Mô tả từng file: [data/README.md](data/README.md).
+
+🔑 = lệnh hỏi **mật khẩu keystore**. Hai script chỉ đọc chạy được với mạng `sepoliaPublic` (RPC công cộng,
+không cần mật khẩu) hoặc `sepolia` (RPC riêng của bạn – hỏi mật khẩu, nhanh và ổn định hơn).
+
+```shell
+# 1. Đo trượt giá theo quy mô lệnh – chỉ gọi quote(), không tốn gas
+npx hardhat run scripts/measure-slippage.ts --network sepoliaPublic
+
+# 2. 🔑 Gửi 4 approve + 10 lệnh thật (~200 USD/lệnh) từ ví deploy, dùng số dư sẵn có.
+#    Script in ước tính ETH rồi hỏi "Gửi các giao dịch trên? (y/n)" → gõ y
+npx hardhat run scripts/measure-tx.ts --network sepolia
+
+# 3. Thu toàn bộ lịch sử chuyển tiền (gồm cả lệnh vừa đo) – chỉ đọc
+npx hardhat run scripts/collect-history.ts --network sepoliaPublic
+
+# 4. Tóm tắt → data/summary.md (chỉ đọc file CSV, không kết nối mạng)
+node scripts/summarize.ts
+```
+
+Chạy thử trên máy: thay `--network ...` bằng `--network localhost` (node local đang chạy), bước 2 dùng
+`echo y | npx hardhat run scripts/measure-tx.ts --network localhost`, bước 4 là `node scripts/summarize.ts data/chain-31337`.
+
 ## Ảnh giao diện
 
 Ảnh gốc (PNG nặng, nền trắng, khoảng 9,6 MB) để ở `design/source/` và **giữ riêng trên máy**: thư mục này nằm trong `.gitignore`, không có trên GitHub và không đưa lên web. Muốn chạy lại script thì xin nhóm 4 file `bg-left.png`, `bg-right.png`, `hero.png`, `logo.png` rồi chép vào `design/source/`. Script
@@ -176,6 +202,7 @@ khoảng 47.000 gas trên máy, khoảng 128.000 gas trên Sepolia. Contract kh�
 | `scripts/lib/pools.ts` | Số liệu các quỹ (dùng chung cho deploy và seed) |
 | `scripts/seed.ts` | Nạp thanh khoản, in tỷ giá |
 | `scripts/demo-send.ts` | Gửi thử 100.000 vJPY → vVND, in báo giá, gas, mã giao dịch |
+| `scripts/collect-history.ts`, `measure-slippage.ts`, `measure-tx.ts`, `summarize.ts` | Đo số liệu cho tiểu luận (Bước 8) → `data/` |
 | `scripts/check-balance.ts` | In ví deploy, số dư ETH, ước tính gas deploy + seed; thiếu tiền thì dừng |
 | `scripts/export-frontend.ts` | Ghi ABI + địa chỉ (theo chainId) ra `frontend/src/contracts.json` |
 | `frontend/src/main.js` | Giao diện: ví, faucet, chuyển tiền, lịch sử, quản trị |

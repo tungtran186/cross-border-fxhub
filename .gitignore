@@ -42,3 +42,6 @@ node_modules
 
 # Ảnh gốc (PNG nặng) giữ riêng trên máy, không đưa lên GitHub
 /design/source
+
+# Số liệu chạy thử trên mạng local (data/ chỉ giữ số liệu Sepolia)
+/data/chain-*

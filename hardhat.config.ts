@@ -42,6 +42,13 @@ export default defineConfig({
       url: configVariable("SEPOLIA_RPC_URL"),
       accounts: [configVariable("SEPOLIA_PRIVATE_KEY")],
     },
+    // Sepolia CHỈ ĐỌC qua RPC công cộng, không có khoá → không hỏi mật khẩu keystore.
+    // Dùng cho script chỉ đọc (collect-history, measure-slippage); không gửi được giao dịch.
+    sepoliaPublic: {
+      type: "http",
+      chainType: "l1",
+      url: "https://ethereum-sepolia-rpc.publicnode.com",
+    },
   },
   // Xác minh mã nguồn trên sepolia.etherscan.io
   verify: {
