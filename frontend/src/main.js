@@ -50,9 +50,10 @@ const tokenByAddress = (a) => state.tokens.find((t) => t.address.toLowerCase() =
 
 function showMessage(text, type = "info") {
   const el = $("message");
+  const t = String(text ?? "").trim();
   el.className = `status ${type}`;
-  el.innerHTML = text ? statusBody(type, esc(text)) : "";
-  el.hidden = !text;
+  el.innerHTML = t ? statusBody(type, esc(t)) : "";
+  el.hidden = !t; // thông báo trống thì ẩn hẳn
 }
 
 // html: chỉ truyền nội dung do chính trang tạo ra; lỗi phải đi qua esc()
@@ -139,6 +140,7 @@ function renderSwitchButtons(currentChainId, wrongNetwork) {
 
 function showDisconnected() {
   hideApp();
+  showMessage("");
   $("intro").hidden = false;
   $("btn-connect").hidden = false;
   $("network-switch").innerHTML = "";

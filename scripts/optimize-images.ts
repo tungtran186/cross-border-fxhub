@@ -57,10 +57,14 @@ for (const name of ["bg-left", "bg-right"]) {
 }
 
 // 2. Hero: rộng tối đa 600px. Thu nhỏ TRƯỚC rồi mới tách nền để vùng bóng mờ mịn, không lấm tấm.
+//    Sau khi tách nền thì cắt sát hình để hero không bị nhỏ vì viền trống.
 {
   const src = `${SRC}/hero.png`;
   const resized = await sharp(src).resize({ width: 600, withoutEnlargement: true }).png().toBuffer();
-  const q = await writeWebp(await removeWhite(resized, 0.095, 0.3), `${OUT}/hero.webp`);
+  // full = 0.14: thân laptop/điện thoại đặc hơn (không bị nhạt); sau đó cắt bỏ viền trong suốt thừa
+  const cut = await (await removeWhite(resized, 0.095, 0.14)).png().toBuffer();
+  const trimmed = await sharp(cut).trim({ background: { r: 0, g: 0, b: 0, alpha: 0 }, threshold: 1 }).png().toBuffer();
+  const q = await writeWebp(sharp(trimmed), `${OUT}/hero.webp`);
   await record(src, `${OUT}/hero.webp`, `WebP q${q}`);
 }
 

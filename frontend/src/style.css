@@ -62,7 +62,8 @@
 
   /* Kích thước */
   --content-width: 820px;
-  --header-width: 1120px; /* header rộng hơn nội dung để chip ví nằm cùng hàng với logo */
+  --header-width: 1120px;
+  --art-gap: 32px; /* khoảng cách ảnh nền 2 bên tới mép thẻ nội dung */ /* header rộng hơn nội dung để chip ví nằm cùng hàng với logo */
   --tap: 44px; /* chiều cao tối thiểu nút bấm trên điện thoại */
 
   font-family: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -72,7 +73,7 @@
 /* ═══════════════════ Nền tảng ═══════════════════ */
 * { box-sizing: border-box; }
 [hidden] { display: none !important; } /* hidden luôn thắng, kể cả khi class đặt display */
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; scroll-padding-top: 96px; }
 body {
   margin: 0;
   min-height: 100vh;
@@ -101,19 +102,35 @@ code { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-si
 .side-art {
   display: none;
   position: fixed;
-  top: 0;
-  height: 100vh;
-  /* chỉ chiếm khoảng trống 2 bên nội dung (+40px lấn nhẹ), phần thừa bị cắt */
-  width: calc((100vw - var(--content-width)) / 2 + 40px);
-  object-fit: cover;
+  top: 50%;
+  transform: translateY(-50%);
+  /* chỉ nằm trong khoảng trống 2 bên, cách mép thẻ nội dung --art-gap; hiện trọn hình */
+  width: calc((100vw - var(--content-width)) / 2 - var(--art-gap));
+  height: auto;
+  max-height: 88vh;
+  object-fit: contain;
   z-index: 0;
   pointer-events: none;
   user-select: none;
 }
-.side-left { left: 0; object-position: right center; }
-.side-right { right: 0; object-position: left center; }
+/* mép phía trong mờ dần: ảnh gốc bị cắt sát mép nên không để lộ đường cắt thẳng */
+.side-left {
+  left: 0;
+  object-position: left center;
+  -webkit-mask-image: linear-gradient(to right, #000 72%, transparent);
+  mask-image: linear-gradient(to right, #000 72%, transparent);
+}
+.side-right {
+  right: 0;
+  object-position: right center;
+  -webkit-mask-image: linear-gradient(to left, #000 72%, transparent);
+  mask-image: linear-gradient(to left, #000 72%, transparent);
+}
 @media (min-width: 1200px) {
-  .side-art { display: block; }
+  .side-art { display: block; opacity: 0.55; } /* màn 1200–1440px: khoảng trống hẹp → mờ hơn */
+}
+@media (min-width: 1441px) {
+  .side-art { opacity: 0.9; }
 }
 
 /* ═══════════════════ Header ═══════════════════ */
@@ -121,7 +138,7 @@ code { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-si
   position: sticky;
   top: 0;
   z-index: 10;
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.94); /* gần đặc: nội dung cuộn qua không lộ ra dưới header */
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--card-border);
@@ -271,12 +288,12 @@ main {
 .summary-hint { margin-left: auto; font-size: 0.8rem; color: var(--muted); }
 .guide-body {
   display: grid;
-  grid-template-columns: 1fr 240px;
+  grid-template-columns: 1fr 280px;
   gap: var(--space-5);
-  align-items: center;
+  align-items: center; /* hero canh giữa theo chiều dọc của khung */
   padding: 0 var(--space-5) var(--space-5);
 }
-.guide-hero { width: 100%; height: auto; }
+.guide-hero { width: 100%; max-width: 300px; height: auto; opacity: 1; justify-self: center; align-self: center; }
 .steps { list-style: none; counter-reset: step; padding: 0; margin: var(--space-4) 0; }
 .steps li { counter-increment: step; position: relative; padding-left: 44px; margin-bottom: var(--space-3); min-height: 30px; }
 .steps li::before {
@@ -493,6 +510,7 @@ input, select {
   box-shadow: var(--shadow-sm);
 }
 #message { margin: 0 0 var(--space-4); }
+.status:empty { display: none; }
 .status .status-icon { width: 22px; height: 22px; margin-top: 1px; }
 .status-text { flex: 1; min-width: 0; }
 .status.info { background: var(--info-bg); border-color: var(--info-border); color: var(--info); }
@@ -567,6 +585,8 @@ input, select {
 
 /* ═══════════════════ Điện thoại ═══════════════════ */
 @media (max-width: 640px) {
+  .topbar { position: static; }
+  html { scroll-padding-top: 0; }
   .guide-body { grid-template-columns: 1fr; }
   .guide-hero { display: none; }
   .summary-hint { display: none; }
