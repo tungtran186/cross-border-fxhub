@@ -526,6 +526,9 @@ input, select {
 .status.info { background: var(--info-bg); border-color: var(--info-border); color: var(--info); }
 .status.success { background: var(--ok-bg); border-color: var(--ok-border); color: var(--ok); }
 .status.error { background: var(--err-bg); border-color: var(--err-border); color: var(--err); }
+.status.warn { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn); }
+.status-actions { margin-top: var(--space-2); }
+.status-actions .btn { background: var(--card-solid); }
 .status a, .tx-card a { color: inherit; display: inline-flex; align-items: center; gap: 4px; }
 .status a .icon, .tx-card a .icon { width: 14px; height: 14px; }
 

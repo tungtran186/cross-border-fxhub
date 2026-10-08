@@ -76,6 +76,97 @@ function txLink(hash, short = false) {
 // Chạy hàm async, lỗi thì hiện lên thanh thông báo
 const safe = (fn) => (...args) => fn(...args).catch((e) => showMessage(friendlyError(e), "error"));
 
+// ───────────────────────── Chờ xác nhận giao dịch ─────────────────────────
+
+const SLOW_AFTER_SEC = 45; // sau 45 giây: báo mạng chậm
+const GIVE_UP_AFTER_SEC = 180; // sau 3 phút: dừng xoay, cho bấm "Kiểm tra lại"
+const pendingChecks = new Set(); // các giao dịch đang chờ – kiểm tra lại khi người dùng quay lại tab
+
+// Nơi hiện trạng thái: ô trạng thái của form, hoặc thanh thông báo chung
+const statusIn = (id) => (html, type) => setStatus(id, html, type);
+const messageBox = (html, type) => {
+  const el = $("message");
+  el.className = `status ${type}`;
+  el.innerHTML = statusBody(type, html);
+  el.hidden = false;
+};
+
+// Thay cho `await tx.wait()`: vẫn trả về đúng biên nhận (receipt) như tx.wait(),
+// chỉ thêm phần hiển thị: số giây đã chờ, cảnh báo mạng chậm, link Etherscan, nút "Kiểm tra lại".
+function waitForConfirmation(tx, render, label = "") {
+  return new Promise((resolve, reject) => {
+    const started = Date.now();
+    const net = state.chain?.name ?? "blockchain";
+    const ex = state.chain?.explorer;
+    const track = ex
+      ? `<a href="${ex}/tx/${tx.hash}" target="_blank" rel="noopener">mở Etherscan${icon("external-link")}</a>`
+      : `xem mã giao dịch <code>${shortAddr(tx.hash)}</code>`;
+    let done = false;
+    let timer = null;
+
+    const finish = (settle, value) => {
+      if (done) return;
+      done = true;
+      clearInterval(timer);
+      pendingChecks.delete(check);
+      settle(value);
+    };
+    // Đã có biên nhận → lấy kết quả qua tx.wait() (trả ngay, báo lỗi nếu giao dịch bị huỷ)
+    const settleFromChain = () => tx.wait().then((r) => finish(resolve, r), (e) => finish(reject, e));
+
+    // Hỏi lại blockchain: giao dịch đã vào block chưa?
+    async function check() {
+      if (done) return true;
+      const receipt = await state.provider.getTransactionReceipt(tx.hash);
+      if (receipt) settleFromChain();
+      return Boolean(receipt);
+    }
+
+    function showGiveUp(note = "") {
+      render(
+        `${label}<b>Chưa nhận được xác nhận</b> sau 3 phút. Giao dịch đã được gửi và có thể vẫn đang chờ trên mạng ${net} – ${track}.` +
+          `${note ? `<br><span class="small-text">${note}</span>` : ""}` +
+          `<div class="status-actions"><button type="button" class="btn small outline" data-recheck="${tx.hash}">${icon("refresh-cw")}Kiểm tra lại</button></div>`,
+        "warn",
+      );
+      document.querySelector(`[data-recheck="${tx.hash}"]`)?.addEventListener("click", async (e) => {
+        e.currentTarget.disabled = true;
+        try {
+          if (!(await check())) showGiveUp(`Đã kiểm tra lúc ${new Date().toLocaleTimeString("vi-VN")}: vẫn chưa có kết quả.`);
+        } catch {
+          showGiveUp("Không kiểm tra được (mất kết nối mạng?). Hãy thử lại.");
+        }
+      });
+    }
+
+    function tick() {
+      if (done) return;
+      const secs = Math.floor((Date.now() - started) / 1000);
+      if (secs >= GIVE_UP_AFTER_SEC) {
+        clearInterval(timer);
+        showGiveUp();
+        return;
+      }
+      let html = `${label}Đang xác nhận trên blockchain… <b>${secs} giây</b> · ${txLink(tx.hash, true)}`;
+      if (secs >= SLOW_AFTER_SEC) {
+        html += `<br>Mạng ${net} đang chậm. Giao dịch đã được gửi, bạn có thể ${track} để theo dõi hoặc chờ thêm.`;
+      }
+      render(html, "info");
+    }
+
+    pendingChecks.add(check);
+    tick();
+    timer = setInterval(tick, 1000);
+    settleFromChain();
+  });
+}
+
+// Người dùng quay lại tab → hỏi lại ngay trạng thái các giao dịch đang chờ
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  for (const check of pendingChecks) check().catch(() => {});
+});
+
 // ───────────────────────── a. Kết nối ví & chuyển mạng ─────────────────────────
 
 async function connect() {
@@ -326,8 +417,7 @@ async function claimFaucet(symbol, btn) {
   try {
     showMessage(`Chờ bạn xác nhận nhận ${symbol} trong MetaMask…`);
     const tx = await t.contract.faucet();
-    showMessage(`Đang xác nhận giao dịch nhận ${symbol}…`);
-    await tx.wait();
+    await waitForConfirmation(tx, messageBox, `Nhận ${symbol} · `);
     showMessage(`Đã nhận ${symbol} thử nghiệm.`, "success");
   } catch (e) {
     showMessage(friendlyError(e), "error");
@@ -475,8 +565,7 @@ async function send(ev) {
     if (needApprove) {
       setStatus("send-status", `Bước 1/2 · Chờ bạn ký <b>cấp hạn mức (approve)</b> ${fmtAmount(amount)} ${from.symbol} trong MetaMask…`);
       const tx = await from.contract.approve(hubAddr, amount);
-      setStatus("send-status", `Bước 1/2 · Đang xác nhận approve… ${txLink(tx.hash, true)}`);
-      await tx.wait();
+      await waitForConfirmation(tx, statusIn("send-status"), "Bước 1/2 · approve · ");
     }
 
     // Bước 2: lấy báo giá mới nhất, tính minOut, gửi
@@ -485,8 +574,7 @@ async function send(ev) {
     const minOut = (quoted * (10000n - bps)) / 10000n;
     setStatus("send-status", `${step}Chờ bạn ký <b>giao dịch gửi tiền</b> trong MetaMask…`);
     const tx = await state.hub.sendCrossBorder(from.address, to.address, amount, minOut, recipient);
-    setStatus("send-status", `${step}Đang xác nhận trên blockchain… ${txLink(tx.hash, true)}`);
-    const receipt = await tx.wait();
+    const receipt = await waitForConfirmation(tx, statusIn("send-status"), step);
 
     // Số nhận thực tế lấy từ event Remittance trong giao dịch
     const event = receipt.logs
@@ -624,8 +712,7 @@ async function togglePause() {
     const paused = await state.hub.paused();
     setStatus("admin-status", "Chờ bạn ký trong MetaMask…");
     const tx = paused ? await state.hub.unpause() : await state.hub.pause();
-    setStatus("admin-status", `Đang xác nhận… ${txLink(tx.hash, true)}`);
-    await tx.wait();
+    await waitForConfirmation(tx, statusIn("admin-status"));
     setStatus(
       "admin-status",
       paused ? "Đã mở lại hệ thống." : "Đã tạm dừng hệ thống. Mọi lệnh gửi tiền sẽ bị chặn cho tới khi mở lại.",
@@ -676,15 +763,13 @@ async function addLiquidity(ev) {
       if ((await tok.contract.allowance(state.account, hubAddr)) < amt) {
         setStatus("admin-status", `Chờ bạn ký <b>approve</b> ${fmtAmount(amt)} ${tok.symbol}…`);
         const tx = await tok.contract.approve(hubAddr, amt);
-        setStatus("admin-status", `Đang xác nhận approve ${tok.symbol}… ${txLink(tx.hash, true)}`);
-        await tx.wait();
+        await waitForConfirmation(tx, statusIn("admin-status"), `approve ${tok.symbol} · `);
       }
     }
 
     setStatus("admin-status", "Chờ bạn ký <b>nạp thanh khoản</b>…");
     const tx = await state.hub.addLiquidity(t.address, amountToken, amountUsd);
-    setStatus("admin-status", `Đang xác nhận… ${txLink(tx.hash, true)}`);
-    await tx.wait();
+    await waitForConfirmation(tx, statusIn("admin-status"), "Nạp thanh khoản · ");
     setStatus(
       "admin-status",
       `Đã nạp ${fmtAmount(amountToken)} ${t.symbol} + ${fmtAmount(amountUsd)} vUSD vào quỹ.`,
