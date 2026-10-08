@@ -35,3 +35,10 @@ node_modules
 
 # Frontend build output
 /frontend/dist
+
+# Ảnh chụp màn hình / ảnh xem trước để soát giao diện (tạo lại được)
+/design/screenshots
+/design/preview
+
+# Ảnh gốc (PNG nặng) giữ riêng trên máy, không đưa lên GitHub
+/design/source

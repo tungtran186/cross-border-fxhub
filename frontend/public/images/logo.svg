@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="FXHub">
+  <!-- Logo FXHub vẽ lại bằng SVG: vòng tròn chuyển màu + 2 cung bên trong + 2 chiếc lá -->
+  <defs>
+    <linearGradient id="fx-ring" x1="0.15" y1="0.1" x2="0.85" y2="0.9">
+      <stop offset="0" stop-color="#1F7656"/>
+      <stop offset="0.5" stop-color="#2E8A66"/>
+      <stop offset="1" stop-color="#80D2AF"/>
+    </linearGradient>
+    <linearGradient id="fx-leaf" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#6CC29E"/>
+      <stop offset="1" stop-color="#86D6B4"/>
+    </linearGradient>
+    <!-- Khe hở trong suốt giữa lá và 2 cung bên trong -->
+    <mask id="fx-gap">
+      <rect width="100" height="100" fill="#fff"/>
+      <path d="M15 35 C21 19 37 8 59 7 C52 22 35 33 15 35 Z" stroke="#000" stroke-width="5"/>
+      <path d="M41 93 C47 76 64 66 86 63 C80 79 62 91 41 93 Z" stroke="#000" stroke-width="5"/>
+    </mask>
+  </defs>
+  <circle cx="50" cy="50" r="45" fill="none" stroke="url(#fx-ring)" stroke-width="10"/>
+  <g mask="url(#fx-gap)" fill="none" stroke-width="10">
+    <path d="M19.9 43.6 A30.8 30.8 0 0 0 46.2 80.6" stroke="#207659"/>
+    <path d="M52.1 19.3 A30.8 30.8 0 0 1 79.3 59.5" stroke="#7FD3B1"/>
+  </g>
+  <path d="M15 35 C21 19 37 8 59 7 C52 22 35 33 15 35 Z" fill="#217759"/>
+  <path d="M41 93 C47 76 64 66 86 63 C80 79 62 91 41 93 Z" fill="url(#fx-leaf)"/>
+</svg>

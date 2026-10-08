@@ -133,6 +133,18 @@ git commit -m "Deploy Sepolia"
 Sau bước 6, mở web (`npm run dev` trong `frontend/`), bấm **Chuyển sang Sepolia** là dùng được trên testnet;
 mã giao dịch trên web sẽ là link tới sepolia.etherscan.io.
 
+## Ảnh giao diện
+
+Ảnh gốc (PNG nặng, nền trắng, khoảng 9,6 MB) để ở `design/source/` và **giữ riêng trên máy**: thư mục này nằm trong `.gitignore`, không có trên GitHub và không đưa lên web. Muốn chạy lại script thì xin nhóm 4 file `bg-left.png`, `bg-right.png`, `hero.png`, `logo.png` rồi chép vào `design/source/`. Script
+[scripts/optimize-images.ts](scripts/optimize-images.ts) tách nền trắng thành trong suốt, thu nhỏ và xuất
+WebP/PNG nhẹ vào `frontend/public/images/`:
+
+```shell
+node scripts/optimize-images.ts
+```
+
+`frontend/public/images/logo.svg` là logo vẽ tay (dùng làm favicon), script không ghi đè file này.
+
 ## Đưa web lên GitHub Pages
 
 Workflow [.github/workflows/deploy-pages.yml](.github/workflows/deploy-pages.yml) tự build thư mục

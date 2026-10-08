@@ -3,112 +3,171 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Chuyển tiền xuyên biên giới</title>
+    <meta name="theme-color" content="#1F7A52" />
+    <title>FXHub · Chuyển tiền xuyên biên giới</title>
+    <link rel="icon" type="image/svg+xml" href="/images/logo.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body>
+    <!-- Hình trang trí 2 bên (chỉ hiện trên màn hình rộng ≥ 1200px) -->
+    <img class="side-art side-left" src="/images/bg-left.webp" alt="" aria-hidden="true" loading="lazy" />
+    <img class="side-art side-right" src="/images/bg-right.webp" alt="" aria-hidden="true" loading="lazy" />
+
     <header class="topbar">
-      <div class="brand">
-        <strong>FXHub</strong>
-        <span class="muted">Chuyển tiền xuyên biên giới · testnet</span>
-      </div>
-      <div class="wallet">
-        <span id="network-badge" class="badge" hidden></span>
-        <span id="account-badge" class="badge" hidden></span>
-        <button id="btn-connect" class="btn primary">Kết nối ví</button>
-        <span id="network-switch" class="wallet"></span>
+      <div class="topbar-inner">
+        <a class="brand" href="./">
+          <img class="brand-logo" src="/images/logo.svg" alt="" width="40" height="40" />
+          <span class="brand-text">
+            <strong>FXHub</strong>
+            <span>Chuyển tiền xuyên biên giới · testnet</span>
+          </span>
+        </a>
+        <div class="wallet">
+          <span id="network-badge" class="chip chip-network" hidden></span>
+          <span id="account-badge" class="chip chip-account" hidden>
+            <span class="chip-dot" aria-hidden="true"></span>
+            <span id="account-addr"></span>
+            <button id="btn-copy" class="icon-btn" type="button" title="Sao chép địa chỉ ví" aria-label="Sao chép địa chỉ ví"></button>
+          </span>
+          <span id="network-switch" class="switches"></span>
+          <button id="btn-connect" class="btn primary" data-icon="wallet">Kết nối ví</button>
+        </div>
       </div>
     </header>
 
     <main>
-      <div id="message" class="message" hidden></div>
+      <div id="message" class="status" hidden></div>
 
-      <section id="intro" class="card">
-        <h2>Chào bạn 👋</h2>
+      <section id="intro" class="card intro">
+        <h1>Chuyển tiền quốc tế trong <span class="accent">một giao dịch</span></h1>
         <p>
-          Gửi vJPY, vKRW, vTWD hoặc vUSD, người nhận ở Việt Nam nhận vVND trong <b>một giao dịch</b>.
+          Gửi vJPY, vKRW, vTWD hoặc vUSD – người nhận ở Việt Nam nhận vVND ngay.
           Đây là tiền giả lập trên mạng thử nghiệm, không phải tiền thật.
         </p>
         <p class="muted">Bấm <b>Kết nối ví</b> ở góc trên để bắt đầu (cần cài MetaMask).</p>
       </section>
 
-      <!-- Hướng dẫn cho người mới: mở sẵn khi chưa kết nối, thu gọn khi đã dùng được -->
+      <!-- Hướng dẫn: mở sẵn khi chưa kết nối, thu gọn khi đã dùng được -->
       <details id="guide" class="card guide" open>
-        <summary>Hướng dẫn cho người mới</summary>
-        <p class="warn-note">
-          ⚠️ Đây là <b>tiền thử nghiệm</b> trên mạng Sepolia (testnet), <b>không có giá trị</b>, không mua bán được.
-          Không bao giờ nhập cụm từ khôi phục (12 từ bí mật) của ví vào bất kỳ trang web nào.
-        </p>
-        <ol>
-          <li>
-            <b>Cài MetaMask</b> – ví điện tử dạng tiện ích trình duyệt:
-            <a href="https://metamask.io/download" target="_blank" rel="noopener">metamask.io/download</a>.
-            Tạo ví mới theo hướng dẫn của MetaMask.
-          </li>
-          <li>
-            Bấm <b>Kết nối ví</b>, rồi bấm <b>Chuyển sang Sepolia</b> (mạng thử nghiệm của Ethereum).
-          </li>
-          <li>
-            <b>Xin SepoliaETH miễn phí</b> để trả phí giao dịch (phí gas):
-            <a id="faucet-link" target="_blank" rel="noopener">Google Cloud Sepolia Faucet</a>
-            → dán địa chỉ ví của bạn → bấm nhận. Cần đăng nhập Google.
-          </li>
-          <li>Vào tab <b>Ví</b>, bấm <b>Nhận coin thử nghiệm</b> để có vJPY, vKRW, vTWD, vUSD (mỗi loại 1 lần/24 giờ).</li>
-          <li>Vào tab <b>Chuyển tiền</b>: chọn đồng gửi, đồng nhận, số tiền, địa chỉ người nhận rồi bấm <b>Gửi</b>.</li>
-        </ol>
-        <h3>Trên điện thoại</h3>
-        <p>
-          Safari/Chrome trên điện thoại không có MetaMask. Hãy cài <b>app MetaMask</b>, mở app → biểu tượng
-          <b>trình duyệt</b> (Explore / Browser) → dán link trang này vào thanh địa chỉ.
-        </p>
-        <p id="mobile-open" hidden>
-          <a id="mm-app-link" class="btn primary block">Mở trang này trong app MetaMask</a>
-        </p>
+        <summary>
+          <span class="summary-title" data-icon="book-open">Hướng dẫn sử dụng</span>
+          <span class="summary-hint">bấm để thu gọn / mở</span>
+        </summary>
+        <div class="guide-body">
+          <div class="guide-main">
+            <p class="note note-warn" data-icon="triangle-alert">
+              <span>Đây là <b>tiền thử nghiệm</b> trên mạng Sepolia (testnet), <b>không có giá trị</b>, không mua bán được.
+              Không bao giờ nhập cụm từ khôi phục (12 từ bí mật) của ví vào bất kỳ trang web nào.</span>
+            </p>
+            <ol class="steps">
+              <li>
+                <b>Cài MetaMask</b> – ví điện tử dạng tiện ích trình duyệt:
+                <a href="https://metamask.io/download" target="_blank" rel="noopener">metamask.io/download</a>.
+                Tạo ví mới theo hướng dẫn của MetaMask.
+              </li>
+              <li>Bấm <b>Kết nối ví</b>, rồi bấm <b>Chuyển sang Sepolia</b> (mạng thử nghiệm của Ethereum).</li>
+              <li>
+                <b>Xin SepoliaETH miễn phí</b> để trả phí giao dịch (phí gas):
+                <a id="faucet-link" target="_blank" rel="noopener">Google Cloud Sepolia Faucet</a>
+                → dán địa chỉ ví của bạn → bấm nhận. Cần đăng nhập Google.
+              </li>
+              <li>Vào tab <b>Ví</b>, bấm <b>Nhận coin thử nghiệm</b> để có vJPY, vKRW, vTWD, vUSD (mỗi loại 1 lần/24 giờ).</li>
+              <li>Vào tab <b>Chuyển tiền</b>: chọn đồng gửi, đồng nhận, số tiền, địa chỉ người nhận rồi bấm <b>Gửi</b>.</li>
+            </ol>
+            <div class="mobile-tip">
+              <h3 data-icon="smartphone">Trên điện thoại</h3>
+              <p>
+                Safari/Chrome trên điện thoại không có MetaMask. Hãy cài <b>app MetaMask</b>, mở app → biểu tượng
+                <b>trình duyệt</b> (Explore / Browser) → dán link trang này vào thanh địa chỉ.
+              </p>
+              <p id="mobile-open" hidden>
+                <a id="mm-app-link" class="btn primary block">Mở trang này trong app MetaMask</a>
+              </p>
+            </div>
+          </div>
+          <img class="guide-hero" src="/images/hero.webp" alt="Minh hoạ: laptop và điện thoại dùng ví điện tử" loading="lazy" width="600" height="499" />
+        </div>
       </details>
 
       <nav id="tabs" class="tabs" hidden>
-        <button data-tab="wallet" class="tab active">Ví</button>
-        <button data-tab="send" class="tab">Chuyển tiền</button>
-        <button data-tab="history" class="tab">Lịch sử</button>
-        <button data-tab="admin" class="tab" id="tab-admin" hidden>Quản trị</button>
+        <button data-tab="wallet" class="tab active" data-icon="wallet">Ví</button>
+        <button data-tab="send" class="tab" data-icon="send">Chuyển tiền</button>
+        <button data-tab="history" class="tab" data-icon="history">Lịch sử</button>
+        <button data-tab="admin" class="tab" id="tab-admin" data-icon="shield-check" hidden>Quản trị</button>
       </nav>
 
       <!-- Tab Ví: số dư + faucet -->
       <section id="panel-wallet" class="card panel" hidden>
         <div class="card-head">
-          <h2>Số dư của ví</h2>
-          <button id="btn-refresh" class="btn small">Làm mới</button>
+          <div>
+            <h2>Số dư của ví</h2>
+            <p class="muted small-text" id="eth-balance"></p>
+          </div>
+          <button id="btn-refresh" class="btn ghost small" data-icon="refresh-cw">Làm mới</button>
         </div>
-        <p class="muted" id="eth-balance"></p>
-        <div id="balances" class="rows"></div>
-        <p class="muted small-text">
-          "Nhận coin thử nghiệm": mỗi ví nhận miễn phí 1 lần mỗi 24 giờ cho từng loại coin.
+        <div id="balances" class="coin-list"></div>
+        <p class="muted small-text footnote" data-icon="info">
+          <span>"Nhận coin thử nghiệm": mỗi ví nhận miễn phí 1 lần mỗi 24 giờ cho từng loại coin.</span>
         </p>
       </section>
 
       <!-- Tab Chuyển tiền -->
       <section id="panel-send" class="card panel" hidden>
-        <h2>Chuyển tiền</h2>
+        <div class="card-head">
+          <h2>Chuyển tiền</h2>
+        </div>
         <form id="send-form" autocomplete="off">
-          <div class="grid2">
-            <label>Đồng gửi <select id="send-from"></select></label>
-            <label>Đồng nhận <select id="send-to"></select></label>
+          <div class="amount-box">
+            <div class="amount-box-head">
+              <span class="label">Bạn gửi</span>
+              <span class="muted small-text" id="send-balance"></span>
+            </div>
+            <div class="amount-row">
+              <input id="send-amount" class="amount-input" inputmode="decimal" placeholder="0" aria-label="Số tiền gửi" />
+              <label class="coin-select">
+                <span id="send-from-coin"></span>
+                <select id="send-from" aria-label="Đồng gửi"></select>
+              </label>
+            </div>
+            <p class="muted small-text">Gõ kiểu Việt Nam: 100.000 hoặc 1,5</p>
           </div>
-          <label>
-            Số tiền gửi <span class="muted" id="send-balance"></span>
-            <input id="send-amount" inputmode="decimal" placeholder="vd: 100.000 hoặc 1,5" />
-          </label>
-          <label>
-            Địa chỉ người nhận
+
+          <div class="swap-row">
+            <button id="btn-swap" class="swap-btn" type="button" title="Đảo chiều" aria-label="Đảo đồng gửi và đồng nhận" data-icon="arrow-down-up"></button>
+          </div>
+
+          <div class="amount-box receive">
+            <div class="amount-box-head">
+              <span class="label">Người nhận được</span>
+              <span class="muted small-text">ước tính</span>
+            </div>
+            <div class="amount-row">
+              <output id="send-out" class="amount-output">0</output>
+              <label class="coin-select">
+                <span id="send-to-coin"></span>
+                <select id="send-to" aria-label="Đồng nhận"></select>
+              </label>
+            </div>
+          </div>
+
+          <label class="field">
+            <span class="label">Địa chỉ người nhận</span>
             <input id="send-recipient" placeholder="0x..." spellcheck="false" />
           </label>
-          <label class="inline">
-            Trượt giá chấp nhận (%)
+          <label class="field inline">
+            <span class="label">Trượt giá chấp nhận (%)</span>
             <input id="send-slippage" inputmode="decimal" value="0,5" class="short" />
           </label>
 
           <div id="quote" class="quote" hidden></div>
 
-          <button id="btn-send" type="submit" class="btn primary block">Gửi</button>
+          <button id="btn-send" type="submit" class="btn primary block lg" data-icon="send">Gửi</button>
         </form>
         <div id="send-status" class="status" hidden></div>
       </section>
@@ -117,37 +176,44 @@
       <section id="panel-history" class="card panel" hidden>
         <div class="card-head">
           <h2>Lịch sử chuyển tiền</h2>
-          <button id="btn-history" class="btn small">Làm mới</button>
+          <button id="btn-history" class="btn ghost small" data-icon="refresh-cw">Làm mới</button>
         </div>
-        <div id="history" class="rows"></div>
+        <div id="history" class="tx-list"></div>
       </section>
 
       <!-- Tab Quản trị (chỉ owner) -->
       <section id="panel-admin" class="card panel" hidden>
         <div class="card-head">
           <h2>Quản trị sàn</h2>
-          <button id="btn-admin-refresh" class="btn small">Làm mới</button>
+          <button id="btn-admin-refresh" class="btn ghost small" data-icon="refresh-cw">Làm mới</button>
         </div>
         <div class="pause-row">
-          <span>Trạng thái: <b id="pause-state">…</b></span>
-          <button id="btn-pause" class="btn warn small">…</button>
+          <div>
+            <span class="label">Trạng thái sàn</span>
+            <b id="pause-state" class="pill">…</b>
+          </div>
+          <button id="btn-pause" class="btn warn">…</button>
         </div>
 
         <h3>Các quỹ (ghép với vUSD)</h3>
-        <div id="pools" class="rows"></div>
+        <div id="pools" class="pool-grid"></div>
 
         <h3>Nạp thêm thanh khoản</h3>
-        <form id="liq-form" autocomplete="off">
-          <label>Quỹ <select id="liq-token"></select></label>
+        <form id="liq-form" class="liq-form" autocomplete="off">
+          <label class="field"><span class="label">Quỹ</span> <select id="liq-token"></select></label>
           <div class="grid2">
-            <label><span id="liq-token-label">Số token</span> <input id="liq-amount-token" inputmode="decimal" /></label>
-            <label>Số vUSD <input id="liq-amount-usd" inputmode="decimal" /></label>
+            <label class="field"><span class="label" id="liq-token-label">Số token</span> <input id="liq-amount-token" inputmode="decimal" /></label>
+            <label class="field"><span class="label">Số vUSD</span> <input id="liq-amount-usd" inputmode="decimal" /></label>
           </div>
           <p class="muted small-text" id="liq-hint"></p>
-          <button type="submit" id="btn-liq" class="btn primary block">Nạp thanh khoản</button>
+          <button type="submit" id="btn-liq" class="btn primary block" data-icon="plus">Nạp thanh khoản</button>
         </form>
         <div id="admin-status" class="status" hidden></div>
       </section>
+
+      <footer class="footer muted small-text">
+        FXHub · Demo môn Blockchain – Thạc sĩ Fintech UEB · Chỉ dùng tiền thử nghiệm trên testnet
+      </footer>
     </main>
 
     <script type="module" src="/src/main.js"></script>

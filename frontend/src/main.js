@@ -3,6 +3,7 @@ import { BrowserProvider, Contract, getAddress, isAddress } from "ethers";
 import config from "./contracts.json";
 import { fmtAmount, parseAmount, fmtPct, fmtTime, shortAddr } from "./format.js";
 import { friendlyError, initErrors, UserError } from "./errors.js";
+import { icon, hydrateIcons, coinBadge, coinName, statusBody } from "./ui.js";
 
 initErrors(config.abi);
 
@@ -49,8 +50,8 @@ const tokenByAddress = (a) => state.tokens.find((t) => t.address.toLowerCase() =
 
 function showMessage(text, type = "info") {
   const el = $("message");
-  el.className = `message ${type}`;
-  el.textContent = text;
+  el.className = `status ${type}`;
+  el.innerHTML = text ? statusBody(type, esc(text)) : "";
   el.hidden = !text;
 }
 
@@ -58,7 +59,7 @@ function showMessage(text, type = "info") {
 function setStatus(id, html, type = "info") {
   const el = $(id);
   el.className = `status ${type}`;
-  el.innerHTML = html;
+  el.innerHTML = html ? statusBody(type, html) : "";
   el.hidden = !html;
 }
 
@@ -66,7 +67,9 @@ function setStatus(id, html, type = "info") {
 function txLink(hash, short = false) {
   const text = short ? shortAddr(hash) : hash;
   const ex = state.chain?.explorer;
-  return ex ? `<a href="${ex}/tx/${hash}" target="_blank" rel="noopener"><code>${text}</code></a>` : `<code>${text}</code>`;
+  return ex
+    ? `<a href="${ex}/tx/${hash}" target="_blank" rel="noopener"><code>${text}</code>${icon("external-link")}</a>`
+    : `<code>${text}</code>`;
 }
 
 // Chạy hàm async, lỗi thì hiện lên thanh thông báo
@@ -129,7 +132,7 @@ function renderSwitchButtons(currentChainId, wrongNetwork) {
   $("network-switch").innerHTML = NETWORKS.filter((n) => n.chainId !== currentChainId)
     .map(
       (n) =>
-        `<button class="btn small ${wrongNetwork ? "warn" : ""}" data-switch="${n.chainId}">Chuyển sang ${esc(n.name)}</button>`,
+        `<button class="btn small ${wrongNetwork ? "primary" : "outline"}" data-switch="${n.chainId}">${icon("arrow-right")}Chuyển sang ${esc(n.name)}</button>`,
     )
     .join("");
 }
@@ -147,7 +150,7 @@ function showWrongNetwork(chainId) {
   hideApp();
   const badge = $("network-badge");
   badge.hidden = false;
-  badge.className = "badge bad";
+  badge.className = "chip chip-network bad";
   badge.textContent = `Sai mạng (chain ${chainId})`;
   renderSwitchButtons(chainId, true);
   const names = NETWORKS.map((n) => n.name).join(" hoặc ");
@@ -168,7 +171,8 @@ async function init() {
   $("intro").hidden = true;
   $("btn-connect").hidden = true;
   $("account-badge").hidden = false;
-  $("account-badge").textContent = shortAddr(state.account);
+  $("account-addr").textContent = shortAddr(state.account);
+  $("account-badge").title = state.account;
 
   const network = networkOf(chainId);
   if (!network) return showWrongNetwork(chainId);
@@ -176,7 +180,7 @@ async function init() {
   renderSwitchButtons(chainId, false);
   const badge = $("network-badge");
   badge.hidden = false;
-  badge.className = "badge";
+  badge.className = "chip chip-network";
   badge.textContent = network.name;
 
   // Mạng được hỗ trợ nhưng chưa deploy contract lên đó
@@ -240,6 +244,12 @@ function showTab(tab) {
   safe(loaders[tab])();
 }
 
+// Huy hiệu tròn cạnh ô chọn đồng gửi / đồng nhận
+function updateCoinBadges() {
+  $("send-from-coin").innerHTML = coinBadge($("send-from").value, "sm");
+  $("send-to-coin").innerHTML = coinBadge($("send-to").value, "sm");
+}
+
 function fillSelects() {
   const options = (list) => list.map((t) => `<option value="${t.symbol}">${t.symbol}</option>`).join("");
   if (!$("send-from").options.length) {
@@ -248,6 +258,7 @@ function fillSelects() {
     $("send-from").value = "vJPY";
     $("send-to").value = "vVND";
   }
+  updateCoinBadges();
   if (!$("liq-token").options.length) {
     $("liq-token").innerHTML = options(state.tokens.filter((t) => t !== state.usd));
     updateLiqLabel();
@@ -279,23 +290,28 @@ async function loadBalances() {
     ),
   ]);
 
-  $("eth-balance").textContent = `ETH để trả phí gas: ${fmtAmount(ethBalance, 4)}`;
+  $("eth-balance").textContent = `ETH để trả phí gas: ${fmtAmount(ethBalance, 4)} ETH`;
   $("balances").innerHTML = rows
     .map(({ t, balance, last, cooldown, amount }) => {
       const nextAt = last === 0n ? 0 : Number(last + cooldown); // 0 = chưa xin lần nào
       const waiting = nextAt > now;
       return `
-        <div class="row">
-          <div class="main">
-            <span class="symbol">${t.symbol}</span>
-            <span class="amount">${fmtAmount(balance)}</span>
-            ${waiting ? `<span class="muted small-text">Đã nhận hôm nay · xin lại lúc ${fmtTime(nextAt)}</span>` : ""}
+        <div class="coin-row">
+          <div class="coin-info">
+            ${coinBadge(t.symbol)}
+            <div class="coin-text">
+              <span class="amount">${fmtAmount(balance)}<small>${t.symbol}</small></span>
+              <span class="name">${coinName(t.symbol)}</span>
+              ${waiting ? `<span class="wait">${icon("clock")}Xin lại lúc ${fmtTime(nextAt)}</span>` : ""}
+            </div>
           </div>
-          <div class="actions">
-            <button class="btn small primary" data-faucet="${t.symbol}" ${waiting ? "disabled" : ""}>
-              Nhận coin thử nghiệm (+${fmtAmount(amount, 0)})
-            </button>
-            <button class="btn small" data-watch="${t.symbol}">Thêm vào MetaMask</button>
+          <div class="coin-actions">
+            ${
+              waiting
+                ? `<button class="btn small" data-faucet="${t.symbol}" disabled title="Đã nhận hôm nay">${icon("lock")}Đã nhận · chờ 24 giờ</button>`
+                : `<button class="btn small primary" data-faucet="${t.symbol}">${icon("gift")}Nhận coin thử nghiệm (+${fmtAmount(amount, 0)})</button>`
+            }
+            <button class="btn small outline" data-watch="${t.symbol}">${icon("wallet")}Thêm vào MetaMask</button>
           </div>
         </div>`;
     })
@@ -360,8 +376,9 @@ async function listedOut(from, to, amount) {
 function showQuoteError(text) {
   const box = $("quote");
   box.className = "quote error";
-  box.textContent = text;
+  box.innerHTML = `${icon("circle-alert")}<span>${esc(text)}</span>`;
   box.hidden = false;
+  $("send-out").textContent = "—";
 }
 
 let quoteSeq = 0; // chỉ hiện kết quả của lần báo giá mới nhất
@@ -380,10 +397,15 @@ async function updateQuote() {
 
   // Số dư đồng gửi, hiện cạnh ô số tiền
   from.contract.balanceOf(state.account).then((b) => {
-    $("send-balance").textContent = `(số dư: ${fmtAmount(b)} ${from.symbol})`;
+    $("send-balance").textContent = `Số dư: ${fmtAmount(b)} ${from.symbol}`;
   });
 
-  if (!amountText) return void (box.hidden = true);
+  updateCoinBadges();
+  if (!amountText) {
+    box.hidden = true;
+    $("send-out").textContent = "0";
+    return;
+  }
   if (from === to) return showQuoteError("Đồng gửi và đồng nhận phải khác nhau.");
   const amount = parseAmount(amountText);
   if (amount === null) return showQuoteError("Số tiền không hợp lệ. Gõ kiểu 100.000 hoặc 1,5.");
@@ -399,22 +421,20 @@ async function updateQuote() {
     const bps = slippageBps();
     const minOut = bps === null ? null : (out * (10000n - bps)) / 10000n;
     const shortfall = listed > 0n ? ((listed - out) * 10000n) / listed : 0n;
-    const route =
-      from === state.usd || to === state.usd
-        ? `${from.symbol} → ${to.symbol} (1 chặng)`
-        : `${from.symbol} → vUSD → ${to.symbol} (2 chặng)`;
+    // Lộ trình dạng vJPY → vUSD → vVND
+    const hops = from === state.usd || to === state.usd ? [from.symbol, to.symbol] : [from.symbol, "vUSD", to.symbol];
+    const route = hops.map((sym) => `<span class="step">${coinBadge(sym, "sm")}${sym}</span>`).join(icon("arrow-right"));
 
     box.className = "quote";
     box.hidden = false;
+    $("send-out").textContent = fmtAmount(out);
     box.innerHTML = `
-      <div class="muted">Người nhận được khoảng</div>
-      <div class="big">${fmtAmount(out)} ${to.symbol}</div>
       <dl>
         <dt>Tỷ giá thực tế</dt><dd>1 ${from.symbol} = ${fmtAmount((out * ONE) / amount, 4)} ${to.symbol}</dd>
         <dt>Tỷ giá quỹ</dt><dd>1 ${from.symbol} = ${fmtAmount((listed * ONE) / amount, 4)} ${to.symbol}</dd>
-        <dt>Hụt so với tỷ giá quỹ</dt><dd>${fmtPct(shortfall)} <span class="muted">(phí + trượt giá)</span></dd>
+        <dt>Hụt so với tỷ giá quỹ</dt><dd>${fmtPct(shortfall)} <span class="hint">(phí + trượt giá)</span></dd>
         <dt>Nhận tối thiểu</dt><dd>${minOut === null ? "Trượt giá phải từ 0 đến 50%" : `${fmtAmount(minOut)} ${to.symbol}`}</dd>
-        <dt>Lộ trình</dt><dd>${route}</dd>
+        <dt>Lộ trình (${hops.length - 1} chặng)</dt><dd class="route">${route}</dd>
       </dl>`;
   } catch (e) {
     if (seq === quoteSeq) showQuoteError(friendlyError(e));
@@ -480,7 +500,7 @@ async function send(ev) {
 
     setStatus(
       "send-status",
-      `✅ Thành công! Đã gửi ${fmtAmount(amount)} ${from.symbol}; ${shortAddr(recipient)} nhận ` +
+      `<b>Thành công!</b> Đã gửi ${fmtAmount(amount)} ${from.symbol}; ${shortAddr(recipient)} nhận ` +
         `<b>${fmtAmount(received)} ${to.symbol}</b>.<br>Mã giao dịch: ${txLink(receipt.hash)}`,
       "success",
     );
@@ -541,19 +561,24 @@ async function loadHistory() {
       const { sender, recipient, fromToken, toToken, amountIn, amountOut } = e.args;
       const isSender = getAddress(sender) === state.account;
       const isRecipient = getAddress(recipient) === state.account;
-      const tag =
-        isSender && isRecipient
-          ? `<span class="tag self">Tự gửi</span>`
-          : isSender
-            ? `<span class="tag out">Gửi đi</span>`
-            : `<span class="tag in">Nhận về</span>`;
+      const kind = isSender && isRecipient ? "self" : isSender ? "out" : "in";
+      const label = { self: "Tự gửi", out: "Gửi đi", in: "Nhận về" }[kind];
+      const kindIcon = { self: "arrow-down-up", out: "arrow-up-right", in: "arrow-down-left" }[kind];
       const other = isSender ? `Tới ${shortAddr(recipient)}` : `Từ ${shortAddr(sender)}`;
       return `
-        <div class="row">
-          <div class="main">
-            <div>${tag} <span class="muted small-text">${fmtTime(times.get(e.blockNumber))}</span></div>
-            <span class="amount">${fmtAmount(amountIn)} ${sym(fromToken)} → ${fmtAmount(amountOut)} ${sym(toToken)}</span>
-            <span class="muted small-text">${other} · Mã GD ${txLink(e.transactionHash, true)}</span>
+        <div class="tx-card ${kind}">
+          <span class="tx-icon">${icon(kindIcon)}</span>
+          <div class="tx-body">
+            <div class="tx-top">
+              <span class="tag ${kind}">${label}</span>
+              <span class="muted small-text">${fmtTime(times.get(e.blockNumber))}</span>
+            </div>
+            <div class="tx-amounts">
+              <span class="amt">${coinBadge(sym(fromToken), "sm")}${fmtAmount(amountIn)} ${sym(fromToken)}</span>
+              ${icon("arrow-right")}
+              <span class="amt">${coinBadge(sym(toToken), "sm")}${fmtAmount(amountOut)} ${sym(toToken)}</span>
+            </div>
+            <div class="tx-meta"><span>${other}</span><span>Mã GD ${txLink(e.transactionHash, true)}</span></div>
           </div>
         </div>`;
     })
@@ -564,8 +589,10 @@ async function loadHistory() {
 
 async function loadAdmin() {
   const paused = await state.hub.paused();
-  $("pause-state").textContent = paused ? "⏸ Đang tạm dừng" : "▶ Đang hoạt động";
-  $("btn-pause").textContent = paused ? "Mở lại (unpause)" : "Tạm dừng (pause)";
+  $("pause-state").textContent = paused ? "Đang tạm dừng" : "Đang hoạt động";
+  $("pause-state").className = `pill ${paused ? "paused" : "running"}`;
+  $("btn-pause").innerHTML = paused ? `${icon("play")}Mở lại (unpause)` : `${icon("pause")}Tạm dừng (pause)`;
+  $("btn-pause").classList.toggle("on", paused);
 
   const locals = state.tokens.filter((t) => t !== state.usd);
   const pools = await Promise.all(
@@ -579,12 +606,10 @@ async function loadAdmin() {
   $("pools").innerHTML = pools
     .map(
       (p) => `
-        <div class="row">
-          <div class="main">
-            <span class="symbol">${p.t.symbol} / vUSD</span>
-            <span class="muted small-text">${fmtAmount(p.token)} ${p.t.symbol} · ${fmtAmount(p.usd)} vUSD</span>
-          </div>
-          <span class="amount">1 vUSD = ${p.usd > 0n ? fmtAmount((p.token * ONE) / p.usd, 4) : "—"} ${p.t.symbol}</span>
+        <div class="pool-card">
+          <div class="pool-head">${coinBadge(p.t.symbol, "sm")}${p.t.symbol} / vUSD</div>
+          <div class="pool-rate">1 vUSD = ${p.usd > 0n ? fmtAmount((p.token * ONE) / p.usd, 4) : "—"} ${p.t.symbol}</div>
+          <div class="pool-reserves">${fmtAmount(p.token)} ${p.t.symbol} · ${fmtAmount(p.usd)} vUSD</div>
         </div>`,
     )
     .join("");
@@ -660,7 +685,7 @@ async function addLiquidity(ev) {
     await tx.wait();
     setStatus(
       "admin-status",
-      `✅ Đã nạp ${fmtAmount(amountToken)} ${t.symbol} + ${fmtAmount(amountUsd)} vUSD vào quỹ.`,
+      `Đã nạp ${fmtAmount(amountToken)} ${t.symbol} + ${fmtAmount(amountUsd)} vUSD vào quỹ.`,
       "success",
     );
     $("liq-amount-token").value = "";
@@ -675,6 +700,25 @@ async function addLiquidity(ev) {
 }
 
 // ───────────────────────── Gắn sự kiện ─────────────────────────
+
+hydrateIcons();
+$("btn-copy").innerHTML = icon("copy");
+$("btn-copy").onclick = async () => {
+  try {
+    await navigator.clipboard.writeText(state.account);
+    $("btn-copy").innerHTML = icon("check");
+    setTimeout(() => ($("btn-copy").innerHTML = icon("copy")), 1500);
+  } catch {
+    showMessage("Không sao chép được. Hãy bôi đen địa chỉ để sao chép.", "error");
+  }
+};
+// Đảo đồng gửi ↔ đồng nhận rồi báo giá lại
+$("btn-swap").onclick = () => {
+  const from = $("send-from").value;
+  $("send-from").value = $("send-to").value;
+  $("send-to").value = from;
+  $("send-from").dispatchEvent(new Event("input"));
+};
 
 $("btn-connect").onclick = safe(connect);
 $("network-switch").onclick = (e) => {
