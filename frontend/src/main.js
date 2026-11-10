@@ -715,7 +715,7 @@ async function loadAdminState() {
         </div>`,
     )
     .join("");
-  updateLiqPreview(); // số dư quỹ mới → tính lại phần xem trước
+  updateLiqForm(); // số dư quỹ mới → tính lại gợi ý và phần xem trước
 }
 
 async function togglePause() {
@@ -743,14 +743,75 @@ function updateLiqLabel() {
   $("liq-token-label").textContent = `Số ${$("liq-token").value}`;
 }
 
-// Gõ số token → tự điền số vUSD theo tỷ giá hiện tại của quỹ (để không làm lệch tỷ giá)
-function suggestLiqUsd() {
-  const p = state.pools[$("liq-token").value];
-  const amount = parseAmount($("liq-amount-token").value);
-  if (!p || p.token === 0n || amount === null) return void ($("liq-hint").textContent = "");
-  const usd = (amount * p.usd) / p.token;
-  $("liq-amount-usd").value = fmtAmount(usd);
-  $("liq-hint").textContent = `Đã tự điền số vUSD theo tỷ giá hiện tại của quỹ (sửa được).`;
+// ── Tự điền 2 chiều theo tỷ giá quỹ ──
+// liqManual[ô] = true khi người dùng TỰ GÕ số vào ô đó → không bao giờ ghi đè ô này.
+// Ô còn lại (trống hoặc đang là số tự điền) sẽ được điền theo tỷ giá quỹ.
+const LIQ_INPUT = { token: "liq-amount-token", usd: "liq-amount-usd" };
+const liqManual = { token: false, usd: false };
+let liqLastTyped = "token"; // ô người dùng gõ gần nhất – làm gốc cho nút "Điền theo tỷ giá"
+const otherSide = (side) => (side === "token" ? "usd" : "token");
+const RATE_WARN_PPM = 50_000n; // ngưỡng cảnh báo: tỷ giá đổi quá ±5% (50.000 phần triệu)
+
+// Quỹ đang chọn đã có tỷ giá chưa (cần cả 2 bên > 0)
+const selectedPool = () => state.pools[$("liq-token").value];
+const poolHasRate = (p) => Boolean(p && p.token > 0n && p.usd > 0n);
+
+// Lấy số ở ô `side`, tính số ô kia theo tỷ giá quỹ và đánh dấu ô kia là "tự điền"
+function fillFrom(side) {
+  const p = selectedPool();
+  if (!poolHasRate(p)) return false;
+  const target = $(LIQ_INPUT[otherSide(side)]);
+  const amount = parseAmount($(LIQ_INPUT[side]).value);
+  if (amount === null) target.value = ""; // ô gốc trống / sai → xoá số tự điền cũ
+  else target.value = fmtAmount(side === "token" ? (amount * p.usd) / p.token : (amount * p.token) / p.usd, 6);
+  liqManual[otherSide(side)] = false;
+  return true;
+}
+
+// Người dùng gõ vào 1 ô
+function onLiqInput(side) {
+  liqManual[side] = $(LIQ_INPUT[side]).value.trim() !== "";
+  if (liqManual[side]) liqLastTyped = side;
+  if (!liqManual[otherSide(side)]) fillFrom(side); // ô kia chưa tự gõ → điền theo tỷ giá
+  updateLiqForm();
+}
+
+// Nút "Điền theo tỷ giá": giữ ô gõ gần nhất, tính lại ô kia (ô kia quay về "tự điền")
+function refillLiq() {
+  let base = liqLastTyped;
+  if (!$(LIQ_INPUT[base]).value.trim()) base = otherSide(base);
+  if (!$(LIQ_INPUT[base]).value.trim()) return;
+  fillFrom(base);
+  updateLiqForm();
+}
+
+// Nút "Xoá": xoá cả 2 ô, quay về trạng thái tự điền
+function clearLiq() {
+  for (const side of ["token", "usd"]) {
+    $(LIQ_INPUT[side]).value = "";
+    liqManual[side] = false;
+  }
+  updateLiqForm();
+}
+
+// Đổi quỹ: tính lại ô tự điền theo tỷ giá quỹ mới (nếu chỉ 1 ô là nhập tay)
+function onLiqTokenChange() {
+  updateLiqLabel();
+  if (liqManual.token !== liqManual.usd) fillFrom(liqManual.token ? "token" : "usd");
+  updateLiqForm();
+}
+
+// Cập nhật nhãn "tự điền"/"nhập tay", dòng gợi ý và khung xem trước
+function updateLiqForm() {
+  for (const side of ["token", "usd"]) {
+    const el = $(`liq-${side}-mode`);
+    const filled = $(LIQ_INPUT[side]).value.trim() !== "";
+    el.textContent = !filled ? "" : liqManual[side] ? "nhập tay" : "tự điền";
+    el.className = `field-mode${filled && liqManual[side] ? " manual" : ""}`;
+  }
+  const p = selectedPool();
+  $("liq-hint").textContent =
+    p && !poolHasRate(p) ? "Quỹ chưa có tỷ giá nên không tự điền được: tỷ lệ bạn nạp sẽ thành tỷ giá đầu tiên." : "";
   updateLiqPreview();
 }
 
@@ -760,50 +821,83 @@ const fmtPpm = (ppm) =>
   (Number(ppm) / 10000).toLocaleString("vi-VN", { maximumFractionDigits: 4 }) +
   "%";
 
+// Phân tích lần nạp theo số trong form: tỷ giá trước/sau, % thay đổi, có cần cảnh báo không.
+// Dùng chung cho khung xem trước và lúc bấm Nạp. Trả về null nếu chưa nhập gì.
+function liqPlan() {
+  const p = selectedPool();
+  const tokenText = $("liq-amount-token").value.trim();
+  const usdText = $("liq-amount-usd").value.trim();
+  if (!p || (!tokenText && !usdText)) return null;
+  const addToken = parseAmount(tokenText || "0");
+  const addUsd = parseAmount(usdText || "0");
+  if (addToken === null || addUsd === null) return { invalid: true };
+
+  const after = { token: p.token + addToken, usd: p.usd + addUsd };
+  const rateBefore = poolRate(p.token, p.usd);
+  const rateAfter = poolRate(after.token, after.usd);
+  const ppm = rateBefore !== null && rateAfter !== null ? ((rateAfter - rateBefore) * 1_000_000n) / rateBefore : null;
+  const nothing = addToken === 0n && addUsd === 0n;
+  // Cần xác nhận khi: tỷ giá đổi quá ±5%, hoặc nạp 1 phía vào quỹ trống (quỹ vẫn chưa có tỷ giá)
+  const risky = !nothing && (ppm !== null ? ppm >= RATE_WARN_PPM || ppm <= -RATE_WARN_PPM : rateAfter === null);
+  return { p, sym: p.t.symbol, addToken, addUsd, after, rateBefore, rateAfter, ppm, nothing, risky };
+}
+
 // Xem trước ngay khi gõ số: tỷ giá quỹ và số dư quỹ SAU khi nạp
 function updateLiqPreview() {
   const box = $("liq-preview");
-  const p = state.pools[$("liq-token").value];
-  const tokenText = $("liq-amount-token").value.trim();
-  const usdText = $("liq-amount-usd").value.trim();
-  if (!p || (!tokenText && !usdText)) return void (box.hidden = true);
-
+  const plan = liqPlan();
+  if (!plan) return void (box.hidden = true);
   box.hidden = false;
-  const addToken = parseAmount(tokenText || "0");
-  const addUsd = parseAmount(usdText || "0");
-  if (addToken === null || addUsd === null) {
+  if (plan.invalid) {
     box.className = "quote error";
     box.innerHTML = `${icon("circle-alert")}<span>Số tiền không hợp lệ. Gõ kiểu 100.000 hoặc 1,5.</span>`;
     return;
   }
 
-  const sym = p.t.symbol;
-  const after = { token: p.token + addToken, usd: p.usd + addUsd };
-  const rateBefore = poolRate(p.token, p.usd);
-  const rateAfter = poolRate(after.token, after.usd);
-
+  const { p, sym, addToken, addUsd, after, rateBefore, rateAfter, ppm, nothing, risky } = plan;
   // Nhận xét: tỷ giá giữ nguyên hay đổi bao nhiêu %
   let verdict;
-  if (rateAfter === null) verdict = "Quỹ cần có cả 2 đồng mới có tỷ giá";
+  if (nothing) verdict = "Chưa nạp gì (cả 2 số đều bằng 0)";
+  else if (rateAfter === null) verdict = `<span class="up">Quỹ vẫn chưa có tỷ giá (cần cả 2 đồng)</span>`;
   else if (rateBefore === null) verdict = "Quỹ đang trống: tỷ lệ bạn nạp sẽ thành tỷ giá đầu tiên";
   else if (addToken * p.usd === addUsd * p.token) verdict = `<span class="same">Giữ nguyên (nạp đúng tỷ lệ)</span>`;
-  else {
-    const ppm = ((rateAfter - rateBefore) * 1_000_000n) / rateBefore;
-    // Lệch dưới 0,01% thường chỉ do làm tròn số vUSD tự điền
-    verdict =
-      ppm > -100n && ppm < 100n
-        ? `<span class="same">Gần như giữ nguyên (${fmtPpm(ppm)}, do làm tròn)</span>`
-        : `<span class="up">${fmtPpm(ppm)} – nạp lệch tỷ lệ</span>`;
-  }
+  else if (ppm > -100n && ppm < 100n) verdict = `<span class="same">Gần như giữ nguyên (${fmtPpm(ppm)}, do làm tròn)</span>`;
+  else if (risky) verdict = `<span class="up">${fmtPpm(ppm)} – lệch mạnh, quá ±5%</span>`;
+  else verdict = `<span class="up">${fmtPpm(ppm)} – nạp lệch tỷ lệ</span>`;
 
-  box.className = "quote";
+  // Nạp 1 phía (1 ô bằng 0): contract cho phép, nhưng tỷ giá chắc chắn đổi
+  const oneSide =
+    !nothing && (addToken === 0n || addUsd === 0n)
+      ? `<dt>Lưu ý</dt><dd>Chỉ nạp ${addToken === 0n ? "vUSD" : sym} (một phía)</dd>`
+      : "";
+
+  box.className = `quote${risky ? " warn" : ""}`;
   box.innerHTML = `
     <dl>
       <dt>Tỷ giá quỹ hiện tại</dt><dd>${fmtRate(rateBefore, sym)}</dd>
       <dt>Tỷ giá quỹ sau khi nạp</dt><dd>${fmtRate(rateAfter, sym)}</dd>
       <dt>Thay đổi tỷ giá</dt><dd>${verdict}</dd>
       <dt>Số dư quỹ sau khi nạp</dt><dd>${fmtReserves(after, sym)}</dd>
+      ${oneSide}
     </dl>`;
+}
+
+// Hộp xác nhận ngay trên trang (<dialog>); trả về true nếu bấm "Vẫn nạp"
+function askConfirm(html) {
+  const dlg = $("liq-confirm");
+  $("liq-confirm-text").innerHTML = html;
+  dlg.returnValue = "";
+  dlg.showModal();
+  return new Promise((resolve) => dlg.addEventListener("close", () => resolve(dlg.returnValue === "ok"), { once: true }));
+}
+
+// Câu hỏi xác nhận cho lần nạp lệch mạnh
+function riskText(plan) {
+  const { sym, rateBefore, rateAfter, ppm, addToken } = plan;
+  if (ppm === null) {
+    return `Lần nạp này chỉ nạp <b>${addToken === 0n ? "vUSD" : sym}</b> vào quỹ đang trống, nên quỹ <b>vẫn chưa có tỷ giá</b> và chưa đổi tiền được. Bạn chắc chắn?`;
+  }
+  return `Lần nạp này làm tỷ giá quỹ đổi từ <b>${fmtRate(rateBefore, sym)}</b> sang <b>${fmtRate(rateAfter, sym)}</b> (<b>${fmtPpm(ppm)}</b>). Bạn chắc chắn?`;
 }
 
 // Tiến trình nạp: mỗi bước có trạng thái wait (chờ) / active (đang làm) / done / skip (bỏ qua) / fail
@@ -833,7 +927,18 @@ async function addLiquidity() {
     const amountToken = parseAmount($("liq-amount-token").value || "0");
     const amountUsd = parseAmount($("liq-amount-usd").value || "0");
     if (amountToken === null || amountUsd === null) throw new UserError("Số tiền không hợp lệ. Gõ kiểu 100.000 hoặc 1,5.");
-    if (amountToken === 0n && amountUsd === 0n) throw new UserError("Hãy nhập số tiền cần nạp.");
+    // Contract chỉ từ chối khi CẢ 2 số bằng 0 (ZeroAmount); nạp 1 phía vẫn được, nhưng qua cảnh báo bên dưới
+    if (amountToken === 0n && amountUsd === 0n) throw new UserError("Hãy nhập số tiền cần nạp (ít nhất một ô lớn hơn 0).");
+
+    // Đọc lại số dư quỹ mới nhất rồi mới đánh giá; tỷ giá đổi quá ±5% → hỏi xác nhận trên trang
+    state.pools[t.symbol] = await readPool(t);
+    updateLiqForm();
+    const plan = liqPlan();
+    if (plan?.risky && !(await askConfirm(riskText(plan)))) {
+      setStatus("admin-status", "Đã huỷ – chưa nạp gì. Bạn có thể sửa số rồi bấm Nạp lại.", "warn");
+      return;
+    }
+
     const parts = [
       [steps[0], t, amountToken],
       [steps[1], state.usd, amountUsd],
@@ -896,9 +1001,7 @@ async function addLiquidity() {
         <dt>Giao dịch nạp</dt><dd>${txLink(receipt.hash, true)}</dd>
       </dl>`,
     );
-    $("liq-amount-token").value = "";
-    $("liq-amount-usd").value = "";
-    $("liq-hint").textContent = "";
+    clearLiq();
   } catch (e) {
     const msg = esc(friendlyError(e));
     if (!started) {
@@ -911,8 +1014,8 @@ async function addLiquidity() {
     }
   } finally {
     btn.disabled = false;
-    // Tự làm mới khu "Các quỹ" và bảng lịch sử thanh khoản
-    await Promise.all([safe(loadAdminState)(), safe(loadLiqHistory)()]);
+    // Đã gửi giao dịch (hoặc thử gửi) → tự làm mới khu "Các quỹ" và bảng lịch sử thanh khoản
+    if (started) await Promise.all([safe(loadAdminState)(), safe(loadLiqHistory)()]);
   }
 }
 
@@ -1034,12 +1137,11 @@ $("btn-history").onclick = safe(whenConnected(loadHistory));
 
 $("btn-admin-refresh").onclick = safe(whenConnected(loadAdmin));
 $("btn-pause").onclick = whenConnected(togglePause);
-$("liq-token").onchange = () => {
-  updateLiqLabel();
-  suggestLiqUsd();
-};
-$("liq-amount-token").addEventListener("input", suggestLiqUsd);
-$("liq-amount-usd").addEventListener("input", updateLiqPreview);
+$("liq-token").onchange = onLiqTokenChange;
+$("liq-amount-token").addEventListener("input", () => onLiqInput("token"));
+$("liq-amount-usd").addEventListener("input", () => onLiqInput("usd"));
+$("btn-liq-fill").onclick = refillLiq;
+$("btn-liq-clear").onclick = clearLiq;
 $("liq-form").onsubmit = onSubmit(addLiquidity);
 $("btn-liq-history").onclick = safe(whenConnected(loadLiqHistory));
 

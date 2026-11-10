@@ -202,8 +202,20 @@
         <form id="liq-form" class="liq-form" autocomplete="off">
           <label class="field"><span class="label">Quỹ</span> <select id="liq-token"></select></label>
           <div class="grid2">
-            <label class="field"><span class="label" id="liq-token-label">Số token</span> <input id="liq-amount-token" inputmode="decimal" /></label>
-            <label class="field"><span class="label">Số vUSD</span> <input id="liq-amount-usd" inputmode="decimal" /></label>
+            <label class="field">
+              <span class="label" id="liq-token-label">Số token</span>
+              <input id="liq-amount-token" inputmode="decimal" />
+              <span class="field-mode" id="liq-token-mode"></span>
+            </label>
+            <label class="field">
+              <span class="label">Số vUSD</span>
+              <input id="liq-amount-usd" inputmode="decimal" />
+              <span class="field-mode" id="liq-usd-mode"></span>
+            </label>
+          </div>
+          <div class="liq-tools">
+            <button type="button" id="btn-liq-fill" class="btn ghost small" data-icon="refresh-cw">Điền theo tỷ giá</button>
+            <button type="button" id="btn-liq-clear" class="btn ghost small" data-icon="x">Xoá</button>
           </div>
           <p class="muted small-text" id="liq-hint"></p>
           <p class="note liq-note small-text" data-icon="info">
@@ -220,6 +232,18 @@
           <button id="btn-liq-history" class="btn ghost small" data-icon="refresh-cw">Làm mới</button>
         </div>
         <div id="liq-history"></div>
+
+        <!-- Hộp xác nhận ngay trên trang khi nạp làm tỷ giá đổi quá ±5% (không dùng confirm() của trình duyệt) -->
+        <dialog id="liq-confirm" class="confirm-dialog">
+          <form method="dialog">
+            <h3 data-icon="triangle-alert">Nạp lệch tỷ lệ mạnh</h3>
+            <p id="liq-confirm-text"></p>
+            <div class="dialog-actions">
+              <button value="cancel" class="btn outline">Huỷ</button>
+              <button value="ok" class="btn warn">Vẫn nạp</button>
+            </div>
+          </form>
+        </dialog>
       </section>
 
       <footer class="footer muted small-text">

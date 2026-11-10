@@ -28,6 +28,7 @@ import {
   Smartphone,
   TriangleAlert,
   Wallet,
+  X,
 } from "lucide";
 
 const ICONS = {
@@ -58,6 +59,7 @@ const ICONS = {
   smartphone: Smartphone,
   "triangle-alert": TriangleAlert,
   wallet: Wallet,
+  x: X,
 };
 
 // Icon lucide dạng chuỗi <svg> (dữ liệu icon là danh sách [thẻ, thuộc tính])
