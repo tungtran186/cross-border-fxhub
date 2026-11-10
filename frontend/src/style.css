@@ -595,6 +595,38 @@ input, select {
 .pool-reserves { font-size: 0.82rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--space-3); }
 .liq-form .btn { margin-top: var(--space-3); }
+.liq-note { background: var(--info-bg); border: 1px solid var(--info-border); color: var(--info); margin: var(--space-2) 0 0; }
+.liq-note .icon { width: 18px; height: 18px; flex-shrink: 0; }
+#liq-preview { margin-top: var(--space-3); }
+.quote .up { color: var(--warn); }
+.quote .same { color: var(--ok); }
+
+/* Tiến trình nạp thanh khoản: từng bước approve → nạp */
+.progress-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.progress-steps li { display: flex; gap: var(--space-2); align-items: flex-start; }
+.progress-steps li > .icon { width: 18px; height: 18px; flex-shrink: 0; margin-top: 2px; }
+.progress-steps li.wait { opacity: 0.6; }
+.progress-steps li.skip { opacity: 0.75; }
+.progress-steps .step-detail { display: block; font-size: 0.85rem; }
+.liq-summary { display: grid; grid-template-columns: auto 1fr; gap: 4px var(--space-3); margin: var(--space-3) 0 0; padding-top: var(--space-3); border-top: 1px solid currentColor; font-variant-numeric: tabular-nums; }
+.liq-summary dt { opacity: 0.85; }
+.liq-summary dd { margin: 0; font-weight: 600; }
+
+/* Lịch sử thanh khoản: bảng cuộn ngang được trên điện thoại */
+.sub-head { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); margin: var(--space-5) 0 var(--space-3); }
+.sub-head h3 { margin: 0; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card-solid); }
+.liq-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; font-variant-numeric: tabular-nums; }
+.liq-table th, .liq-table td { padding: 8px 12px; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--line); }
+.liq-table th { font-weight: 600; color: var(--muted); background: var(--soft); }
+.liq-table tr:last-child td { border-bottom: 0; }
+.liq-table td.num { text-align: right; }
+.liq-table th.num { text-align: right; }
+.liq-table .pool-name { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.liq-table a { color: inherit; display: inline-flex; align-items: center; gap: 4px; }
+.liq-table a .icon { width: 14px; height: 14px; }
+.tag.add { background: var(--ok-bg); color: var(--ok); }
+.tag.remove { background: var(--err-bg); color: var(--err); }
 
 /* ═══════════════════ Điện thoại ═══════════════════ */
 @media (max-width: 640px) {

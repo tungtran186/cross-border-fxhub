@@ -677,7 +677,24 @@ async function loadHistory() {
 
 // ───────────────────────── g. Quản trị (chỉ owner) ─────────────────────────
 
+// Tỷ giá quỹ = số token đổi được cho 1 vUSD (BigInt, 18 số lẻ); quỹ thiếu 1 bên → null
+const poolRate = (token, usd) => (token > 0n && usd > 0n ? (token * ONE) / usd : null);
+const fmtRate = (rate, sym) => (rate === null ? "chưa có" : `1 vUSD = ${fmtAmount(rate, 4)} ${sym}`);
+const fmtReserves = (p, sym) => `${fmtAmount(p.token)} ${sym} · ${fmtAmount(p.usd)} vUSD`;
+
+// Đọc số dư 1 quỹ; blockTag: đọc tại 1 block cụ thể (mặc định: mới nhất)
+async function readPool(t, blockTag) {
+  const p = await state.hub.pools(t.address, blockTag === undefined ? {} : { blockTag });
+  return { t, token: p.reserveToken, usd: p.reserveUsd };
+}
+
+// Mở tab Quản trị / bấm Làm mới: đọc trạng thái quỹ + lịch sử thanh khoản
 async function loadAdmin() {
+  await Promise.all([loadAdminState(), loadLiqHistory()]);
+}
+
+// Trạng thái hệ thống (pause) + số dư các quỹ
+async function loadAdminState() {
   const paused = await state.hub.paused();
   $("pause-state").textContent = paused ? "Đang tạm dừng" : "Đang hoạt động";
   $("pause-state").className = `pill ${paused ? "paused" : "running"}`;
@@ -685,12 +702,7 @@ async function loadAdmin() {
   $("btn-pause").classList.toggle("on", paused);
 
   const locals = state.tokens.filter((t) => t !== state.usd);
-  const pools = await Promise.all(
-    locals.map(async (t) => {
-      const p = await state.hub.pools(t.address);
-      return { t, token: p.reserveToken, usd: p.reserveUsd };
-    }),
-  );
+  const pools = await Promise.all(locals.map((t) => readPool(t)));
   state.pools = Object.fromEntries(pools.map((p) => [p.t.symbol, p]));
 
   $("pools").innerHTML = pools
@@ -698,11 +710,12 @@ async function loadAdmin() {
       (p) => `
         <div class="pool-card">
           <div class="pool-head">${coinBadge(p.t.symbol, "sm")}${p.t.symbol} / vUSD</div>
-          <div class="pool-rate">1 vUSD = ${p.usd > 0n ? fmtAmount((p.token * ONE) / p.usd, 4) : "—"} ${p.t.symbol}</div>
-          <div class="pool-reserves">${fmtAmount(p.token)} ${p.t.symbol} · ${fmtAmount(p.usd)} vUSD</div>
+          <div class="pool-rate">${fmtRate(poolRate(p.token, p.usd), p.t.symbol)}</div>
+          <div class="pool-reserves">${fmtReserves(p, p.t.symbol)}</div>
         </div>`,
     )
     .join("");
+  updateLiqPreview(); // số dư quỹ mới → tính lại phần xem trước
 }
 
 async function togglePause() {
@@ -722,7 +735,7 @@ async function togglePause() {
     setStatus("admin-status", esc(friendlyError(e)), "error");
   } finally {
     btn.disabled = false;
-    await loadAdmin();
+    await loadAdminState();
   }
 }
 
@@ -737,52 +750,236 @@ function suggestLiqUsd() {
   if (!p || p.token === 0n || amount === null) return void ($("liq-hint").textContent = "");
   const usd = (amount * p.usd) / p.token;
   $("liq-amount-usd").value = fmtAmount(usd);
-  $("liq-hint").textContent = `Đã tự điền số vUSD theo tỷ giá hiện tại của quỹ (sửa được). Nạp lệch tỷ lệ sẽ làm đổi tỷ giá.`;
+  $("liq-hint").textContent = `Đã tự điền số vUSD theo tỷ giá hiện tại của quỹ (sửa được).`;
+  updateLiqPreview();
 }
 
-async function addLiquidity(ev) {
-  ev.preventDefault();
+// Phần trăm thay đổi tính theo phần triệu (ppm): 12345n → "+1,2345%"
+const fmtPpm = (ppm) =>
+  (ppm > 0n ? "+" : "") +
+  (Number(ppm) / 10000).toLocaleString("vi-VN", { maximumFractionDigits: 4 }) +
+  "%";
+
+// Xem trước ngay khi gõ số: tỷ giá quỹ và số dư quỹ SAU khi nạp
+function updateLiqPreview() {
+  const box = $("liq-preview");
+  const p = state.pools[$("liq-token").value];
+  const tokenText = $("liq-amount-token").value.trim();
+  const usdText = $("liq-amount-usd").value.trim();
+  if (!p || (!tokenText && !usdText)) return void (box.hidden = true);
+
+  box.hidden = false;
+  const addToken = parseAmount(tokenText || "0");
+  const addUsd = parseAmount(usdText || "0");
+  if (addToken === null || addUsd === null) {
+    box.className = "quote error";
+    box.innerHTML = `${icon("circle-alert")}<span>Số tiền không hợp lệ. Gõ kiểu 100.000 hoặc 1,5.</span>`;
+    return;
+  }
+
+  const sym = p.t.symbol;
+  const after = { token: p.token + addToken, usd: p.usd + addUsd };
+  const rateBefore = poolRate(p.token, p.usd);
+  const rateAfter = poolRate(after.token, after.usd);
+
+  // Nhận xét: tỷ giá giữ nguyên hay đổi bao nhiêu %
+  let verdict;
+  if (rateAfter === null) verdict = "Quỹ cần có cả 2 đồng mới có tỷ giá";
+  else if (rateBefore === null) verdict = "Quỹ đang trống: tỷ lệ bạn nạp sẽ thành tỷ giá đầu tiên";
+  else if (addToken * p.usd === addUsd * p.token) verdict = `<span class="same">Giữ nguyên (nạp đúng tỷ lệ)</span>`;
+  else {
+    const ppm = ((rateAfter - rateBefore) * 1_000_000n) / rateBefore;
+    // Lệch dưới 0,01% thường chỉ do làm tròn số vUSD tự điền
+    verdict =
+      ppm > -100n && ppm < 100n
+        ? `<span class="same">Gần như giữ nguyên (${fmtPpm(ppm)}, do làm tròn)</span>`
+        : `<span class="up">${fmtPpm(ppm)} – nạp lệch tỷ lệ</span>`;
+  }
+
+  box.className = "quote";
+  box.innerHTML = `
+    <dl>
+      <dt>Tỷ giá quỹ hiện tại</dt><dd>${fmtRate(rateBefore, sym)}</dd>
+      <dt>Tỷ giá quỹ sau khi nạp</dt><dd>${fmtRate(rateAfter, sym)}</dd>
+      <dt>Thay đổi tỷ giá</dt><dd>${verdict}</dd>
+      <dt>Số dư quỹ sau khi nạp</dt><dd>${fmtReserves(after, sym)}</dd>
+    </dl>`;
+}
+
+// Tiến trình nạp: mỗi bước có trạng thái wait (chờ) / active (đang làm) / done / skip (bỏ qua) / fail
+const STEP_ICON = { wait: "circle-dashed", active: "loader", done: "circle-check", skip: "circle-minus", fail: "circle-alert" };
+function stepsHtml(steps) {
+  const items = steps.map(
+    (s, i) => `
+      <li class="${s.state}">
+        ${icon(STEP_ICON[s.state], s.state === "active" ? "spin" : "")}
+        <div><b>Bước ${i + 1}/${steps.length}: ${s.title}</b>${s.detail ? `<span class="step-detail">${s.detail}</span>` : ""}</div>
+      </li>`,
+  );
+  return `<ol class="progress-steps">${items.join("")}</ol>`;
+}
+
+// Nạp thanh khoản: approve token (nếu cần) → approve vUSD (nếu cần) → addLiquidity
+async function addLiquidity() {
   const btn = $("btn-liq");
   const t = tokenBySymbol($("liq-token").value);
   const hubAddr = state.chain.hub;
+  const steps = [`Approve ${t.symbol}`, "Approve vUSD", "Nạp vào quỹ"].map((title) => ({ title, state: "wait", detail: "" }));
+  let started = false; // đã bắt đầu các bước chưa (lỗi nhập liệu thì chỉ hiện lỗi)
+  const render = (type = "info", head = "", tail = "") => setStatus("admin-status", head + stepsHtml(steps) + tail, type);
+
   btn.disabled = true;
   try {
     const amountToken = parseAmount($("liq-amount-token").value || "0");
     const amountUsd = parseAmount($("liq-amount-usd").value || "0");
     if (amountToken === null || amountUsd === null) throw new UserError("Số tiền không hợp lệ. Gõ kiểu 100.000 hoặc 1,5.");
     if (amountToken === 0n && amountUsd === 0n) throw new UserError("Hãy nhập số tiền cần nạp.");
+    const parts = [
+      [steps[0], t, amountToken],
+      [steps[1], state.usd, amountUsd],
+    ];
 
-    // Kiểm tra số dư và approve từng token
-    for (const [tok, amt] of [
-      [t, amountToken],
-      [state.usd, amountUsd],
-    ]) {
+    // Kiểm tra số dư cả 2 đồng trước, để không approve xong mới báo thiếu tiền
+    for (const [, tok, amt] of parts) {
       if (amt === 0n) continue;
       const balance = await tok.contract.balanceOf(state.account);
       if (balance < amt) throw new UserError(`Không đủ số dư: ví có ${fmtAmount(balance)} ${tok.symbol}, cần ${fmtAmount(amt)}.`);
-      if ((await tok.contract.allowance(state.account, hubAddr)) < amt) {
-        setStatus("admin-status", `Chờ bạn ký <b>approve</b> ${fmtAmount(amt)} ${tok.symbol}…`);
-        const tx = await tok.contract.approve(hubAddr, amt);
-        await waitForConfirmation(tx, statusIn("admin-status"), `approve ${tok.symbol} · `);
-      }
     }
 
-    setStatus("admin-status", "Chờ bạn ký <b>nạp thanh khoản</b>…");
+    // Bước 1, 2: approve = cho phép FXHub rút token từ ví owner; hạn mức đã đủ thì bỏ qua
+    started = true;
+    for (const [step, tok, amt] of parts) {
+      if (amt === 0n) {
+        Object.assign(step, { state: "skip", detail: `Bỏ qua – lần này không nạp ${tok.symbol}.` });
+        continue;
+      }
+      const allowance = await tok.contract.allowance(state.account, hubAddr);
+      if (allowance >= amt) {
+        Object.assign(step, { state: "skip", detail: `Bỏ qua – hạn mức đã đủ (${fmtAmount(allowance)} ${tok.symbol}).` });
+        continue;
+      }
+      Object.assign(step, { state: "active", detail: `Chờ bạn ký approve ${fmtAmount(amt)} ${tok.symbol} trong MetaMask…` });
+      render();
+      const tx = await tok.contract.approve(hubAddr, amt);
+      await waitForConfirmation(tx, (html, type) => {
+        step.detail = html;
+        render(type);
+      });
+      Object.assign(step, { state: "done", detail: `Đã approve ${fmtAmount(amt)} ${tok.symbol} · ${txLink(tx.hash, true)}` });
+    }
+
+    // Bước 3: nạp vào quỹ
+    const step = steps[2];
+    const poolBefore = await readPool(t); // dự phòng nếu không đọc được theo block
+    Object.assign(step, { state: "active", detail: "Chờ bạn ký giao dịch nạp thanh khoản trong MetaMask…" });
+    render();
     const tx = await state.hub.addLiquidity(t.address, amountToken, amountUsd);
-    await waitForConfirmation(tx, statusIn("admin-status"), "Nạp thanh khoản · ");
-    setStatus(
-      "admin-status",
-      `Đã nạp ${fmtAmount(amountToken)} ${t.symbol} + ${fmtAmount(amountUsd)} vUSD vào quỹ.`,
+    const receipt = await waitForConfirmation(tx, (html, type) => {
+      step.detail = html;
+      render(type);
+    });
+    Object.assign(step, { state: "done", detail: `Đã nạp · ${txLink(receipt.hash, true)}` });
+
+    // Số dư quỹ ngay TRƯỚC và SAU block chứa giao dịch nạp (chính xác kể cả khi có người chuyển tiền xen giữa)
+    const [before, after] = await Promise.all([
+      readPool(t, receipt.blockNumber - 1).catch(() => poolBefore),
+      readPool(t, receipt.blockNumber).catch(() => readPool(t)),
+    ]);
+    const sym = t.symbol;
+    render(
       "success",
+      "<b>Nạp thanh khoản thành công!</b>",
+      `<dl class="liq-summary">
+        <dt>Đã nạp</dt><dd>${fmtAmount(amountToken)} ${sym} + ${fmtAmount(amountUsd)} vUSD</dd>
+        <dt>Tỷ giá quỹ</dt><dd>Trước: ${fmtRate(poolRate(before.token, before.usd), sym)}<br>Sau: ${fmtRate(poolRate(after.token, after.usd), sym)}</dd>
+        <dt>Số dư quỹ</dt><dd>Trước: ${fmtReserves(before, sym)}<br>Sau: ${fmtReserves(after, sym)}</dd>
+        <dt>Giao dịch nạp</dt><dd>${txLink(receipt.hash, true)}</dd>
+      </dl>`,
     );
     $("liq-amount-token").value = "";
     $("liq-amount-usd").value = "";
     $("liq-hint").textContent = "";
   } catch (e) {
-    setStatus("admin-status", esc(friendlyError(e)), "error");
+    const msg = esc(friendlyError(e));
+    if (!started) {
+      setStatus("admin-status", msg, "error");
+    } else {
+      // Đánh dấu bước đang dở là thất bại, các bước đã xong vẫn giữ link
+      const cur = steps.find((s) => s.state === "active");
+      if (cur) Object.assign(cur, { state: "fail", detail: "" });
+      render("error", `<b>${msg}</b>`);
+    }
   } finally {
     btn.disabled = false;
-    await loadAdmin();
+    // Tự làm mới khu "Các quỹ" và bảng lịch sử thanh khoản
+    await Promise.all([safe(loadAdminState)(), safe(loadLiqHistory)()]);
+  }
+}
+
+// ───────────────────────── h. Lịch sử thanh khoản (event LiquidityAdded / LiquidityRemoved) ─────────────────────────
+
+let liqHistorySeq = 0; // bấm Làm mới khi đang tải thì bỏ lượt tải cũ
+
+async function loadLiqHistory() {
+  const seq = ++liqHistorySeq;
+  const box = $("liq-history");
+  box.innerHTML = `<div class="empty">Đang tải…</div>`;
+  try {
+    const hub = state.hub;
+    const firstBlock = state.chain.deployBlock;
+    const lastBlock = await state.provider.getBlockNumber();
+
+    // Quét từng đoạn tối đa LOG_CHUNK block, như tab Lịch sử
+    const events = [];
+    for (let start = firstBlock; start <= lastBlock; start += LOG_CHUNK) {
+      const end = Math.min(start + LOG_CHUNK - 1, lastBlock);
+      const [added, removed] = await Promise.all([
+        hub.queryFilter(hub.filters.LiquidityAdded(), start, end),
+        hub.queryFilter(hub.filters.LiquidityRemoved(), start, end),
+      ]);
+      if (seq !== liqHistorySeq) return;
+      events.push(...added, ...removed);
+      const pct = Math.round(((end - firstBlock + 1) / (lastBlock - firstBlock + 1)) * 100);
+      box.innerHTML = `<div class="empty">Đang tải… ${pct}% (block ${end.toLocaleString("vi-VN")})</div>`;
+    }
+    events.sort((a, b) => b.blockNumber - a.blockNumber || b.index - a.index); // mới nhất lên đầu
+
+    if (events.length === 0) {
+      box.innerHTML = `<div class="empty">Chưa có lần nạp/rút thanh khoản nào.</div>`;
+      return;
+    }
+
+    const times = new Map();
+    await Promise.all(
+      [...new Set(events.map((e) => e.blockNumber))].map(async (n) => {
+        times.set(n, (await state.provider.getBlock(n)).timestamp);
+      }),
+    );
+    if (seq !== liqHistorySeq) return;
+
+    const rows = events.map((e) => {
+      const { token, amountToken, amountUsd } = e.args;
+      const sym = tokenByAddress(token)?.symbol ?? shortAddr(token);
+      const isAdd = e.eventName === "LiquidityAdded";
+      return `
+        <tr>
+          <td>${fmtTime(times.get(e.blockNumber))}</td>
+          <td><span class="pool-name">${coinBadge(sym, "sm")}${sym}</span></td>
+          <td><span class="tag ${isAdd ? "add" : "remove"}">${isAdd ? "Nạp" : "Rút"}</span></td>
+          <td class="num">${fmtAmount(amountToken)} ${sym}</td>
+          <td class="num">${fmtAmount(amountUsd)} vUSD</td>
+          <td>${txLink(e.transactionHash, true)}</td>
+        </tr>`;
+    });
+    box.innerHTML = `
+      <div class="table-wrap">
+        <table class="liq-table">
+          <thead><tr><th>Thời gian</th><th>Quỹ</th><th>Loại</th><th class="num">Số token</th><th class="num">Số vUSD</th><th>Giao dịch</th></tr></thead>
+          <tbody>${rows.join("")}</tbody>
+        </table>
+      </div>`;
+  } catch (e) {
+    if (seq === liqHistorySeq) box.innerHTML = `<div class="empty">Không tải được lịch sử: ${esc(friendlyError(e))}</div>`;
   }
 }
 
@@ -842,7 +1039,9 @@ $("liq-token").onchange = () => {
   suggestLiqUsd();
 };
 $("liq-amount-token").addEventListener("input", suggestLiqUsd);
+$("liq-amount-usd").addEventListener("input", updateLiqPreview);
 $("liq-form").onsubmit = onSubmit(addLiquidity);
+$("btn-liq-history").onclick = safe(whenConnected(loadLiqHistory));
 
 // Khung hướng dẫn: link faucet, nút mở trong app MetaMask (chỉ hiện trên điện thoại chưa có MetaMask)
 $("faucet-link").href = FAUCET_URL;

@@ -206,9 +206,20 @@
             <label class="field"><span class="label">Số vUSD</span> <input id="liq-amount-usd" inputmode="decimal" /></label>
           </div>
           <p class="muted small-text" id="liq-hint"></p>
+          <p class="note liq-note small-text" data-icon="info">
+            <span><b>Nạp đúng tỷ lệ:</b> tỷ giá giữ nguyên, quỹ dày hơn. <b>Nạp lệch tỷ lệ:</b> tỷ giá thay đổi.</span>
+          </p>
+          <!-- Xem trước tỷ giá quỹ sau khi nạp (cập nhật khi gõ số) -->
+          <div id="liq-preview" class="quote" hidden></div>
           <button type="submit" id="btn-liq" class="btn primary block" data-icon="plus">Nạp thanh khoản</button>
         </form>
         <div id="admin-status" class="status" hidden></div>
+
+        <div class="sub-head">
+          <h3>Lịch sử thanh khoản</h3>
+          <button id="btn-liq-history" class="btn ghost small" data-icon="refresh-cw">Làm mới</button>
+        </div>
+        <div id="liq-history"></div>
       </section>
 
       <footer class="footer muted small-text">
