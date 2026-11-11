@@ -159,6 +159,8 @@ node scripts/summarize.ts
 Chạy thử trên máy: thay `--network ...` bằng `--network localhost` (node local đang chạy), bước 2 dùng
 `echo y | npx hardhat run scripts/measure-tx.ts --network localhost`, bước 4 là `node scripts/summarize.ts data/chain-31337`.
 
+Đo tốc độ tải lịch sử của web (cách cũ vs có bộ nhớ đệm; chỉ đọc Sepolia, không cần mật khẩu; cần `npm install` trong `frontend/` trước): `node scripts/bench-history.mjs`
+
 ## Ảnh giao diện
 
 Ảnh gốc (PNG nặng, nền trắng, khoảng 9,6 MB) để ở `design/source/` và **giữ riêng trên máy**: thư mục này nằm trong `.gitignore`, không có trên GitHub và không đưa lên web. Muốn chạy lại script thì xin nhóm 4 file `bg-left.png`, `bg-right.png`, `hero.png`, `logo.png` rồi chép vào `design/source/`. Script
