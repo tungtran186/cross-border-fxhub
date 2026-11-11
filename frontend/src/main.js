@@ -4,6 +4,7 @@ import config from "./contracts.json";
 import { fmtAmount, parseAmount, fmtPct, fmtTime, shortAddr } from "./format.js";
 import { friendlyError, initErrors, UserError } from "./errors.js";
 import { icon, hydrateIcons, coinBadge, coinName, statusBody } from "./ui.js";
+import { scanWithCache, cacheKey, clearCache } from "./logcache.js";
 
 initErrors(config.abi);
 
@@ -27,9 +28,6 @@ const FAUCET_URL = "https://cloud.google.com/application/web3/faucet/ethereum/se
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 // Link mở trang này bên trong trình duyệt của app MetaMask (dùng trên điện thoại)
 const metamaskAppLink = `https://metamask.app.link/dapp/${location.host}${location.pathname}`;
-
-// Số block tối đa mỗi lần đọc event (RPC công cộng thường giới hạn 10.000)
-const LOG_CHUNK = 10_000;
 
 // Trạng thái hiện tại của trang
 const state = {
@@ -606,49 +604,69 @@ async function send(ev) {
 
 // ───────────────────────── f. Lịch sử (đọc event Remittance) ─────────────────────────
 
+const fmtSec = (ms) => (ms / 1000).toLocaleString("vi-VN", { maximumFractionDigits: 1 }) + " giây";
+
+// Quét event có bộ nhớ đệm (xem logcache.js), cập nhật dòng tiến trình và đo thời gian tải.
+// Thời gian được ghi ra Console (F12) để so sánh trước/sau.
+async function runScan({ label, progressId, key, query, render, isCancelled }) {
+  const progress = $(progressId);
+  const setProgress = (html, cls = "") => {
+    progress.className = `scan-progress ${cls}`;
+    progress.innerHTML = html;
+    progress.hidden = false;
+  };
+  try {
+    const stats = await scanWithCache({
+      provider: state.provider,
+      chainId: state.chain.chainId,
+      key,
+      firstBlock: state.chain.deployBlock,
+      query,
+      isCancelled,
+      onUpdate: (records, info) => {
+        if (isCancelled()) return;
+        render(records, info);
+        if (info.phase === "cache") {
+          setProgress(`${icon("loader", "spin")}Đang hiện ${records.length} mục đã lưu, kiểm tra giao dịch mới…`);
+        } else if (info.phase === "scan") {
+          const [from, to] = info.scanning;
+          setProgress(
+            `${icon("loader", "spin")}Đang quét block ${to.toLocaleString("vi-VN")} → ${from.toLocaleString("vi-VN")} · ${Math.round(info.progress * 100)}%`,
+          );
+        }
+      },
+    });
+    if (!stats || isCancelled()) return; // đã có lượt tải mới thay thế
+    const s = stats;
+    setProgress(
+      `${icon("circle-check")}Cập nhật lúc ${new Date().toLocaleTimeString("vi-VN")} · tải xong sau ${fmtSec(s.ms)}` +
+        ` · ${s.newBlocks.toLocaleString("vi-VN")} block mới quét (${s.chunks} đoạn)` +
+        (s.fromCache ? ` · ${s.fromCache} mục lấy từ bộ nhớ đệm` : ""),
+    );
+    console.info(
+      `[${label}] hiện dữ liệu đầu tiên sau ${s.firstShownMs} ms, xong sau ${s.ms} ms; ` +
+        `quét ${s.newBlocks} block trong ${s.chunks} đoạn (chia nhỏ lại ${s.retries} lần); ${s.fromCache} mục từ bộ nhớ đệm`,
+    );
+  } catch (e) {
+    if (!isCancelled()) setProgress(`${icon("circle-alert")}Không tải được: ${esc(friendlyError(e))}`, "error");
+  }
+}
+
 let historySeq = 0; // bấm Làm mới khi đang tải thì bỏ lượt tải cũ
 
-async function loadHistory() {
-  const seq = ++historySeq;
+// Bộ nhớ đệm riêng cho từng ví (mỗi ví chỉ lưu giao dịch của mình)
+const historyCacheKey = () => cacheKey(state.chain.chainId, state.chain.hub, `remit:${state.account.toLowerCase()}`);
+
+function renderHistory(records, info) {
   const box = $("history");
-  box.innerHTML = `<div class="empty">Đang tải…</div>`;
-  const hub = state.hub;
-  const firstBlock = state.chain.deployBlock;
-  const lastBlock = await state.provider.getBlockNumber();
-
-  // Đọc từng đoạn tối đa LOG_CHUNK block, mỗi đoạn 2 bộ lọc: ví là người gửi, hoặc là người nhận
-  const unique = new Map();
-  for (let start = firstBlock; start <= lastBlock; start += LOG_CHUNK) {
-    const end = Math.min(start + LOG_CHUNK - 1, lastBlock);
-    const [sent, received] = await Promise.all([
-      hub.queryFilter(hub.filters.Remittance(state.account), start, end),
-      hub.queryFilter(hub.filters.Remittance(null, state.account), start, end),
-    ]);
-    if (seq !== historySeq) return;
-    for (const e of [...sent, ...received]) unique.set(`${e.transactionHash}-${e.index}`, e);
-    const pct = Math.round(((end - firstBlock + 1) / (lastBlock - firstBlock + 1)) * 100);
-    box.innerHTML = `<div class="empty">Đang tải… ${pct}% (block ${end.toLocaleString("vi-VN")})</div>`;
-  }
-  const events = [...unique.values()].sort((a, b) => b.blockNumber - a.blockNumber || b.index - a.index);
-
-  if (events.length === 0) {
-    box.innerHTML = `<div class="empty">Chưa có giao dịch nào liên quan tới ví này.</div>`;
+  if (records.length === 0) {
+    box.innerHTML = `<div class="empty">${info.phase === "done" ? "Chưa có giao dịch nào liên quan tới ví này." : "Đang tải…"}</div>`;
     return;
   }
-
-  // Thời điểm của từng block
-  const times = new Map();
-  await Promise.all(
-    [...new Set(events.map((e) => e.blockNumber))].map(async (n) => {
-      times.set(n, (await state.provider.getBlock(n)).timestamp);
-    }),
-  );
-  if (seq !== historySeq) return;
-
   const sym = (addr) => tokenByAddress(addr)?.symbol ?? shortAddr(addr);
-  box.innerHTML = events
-    .map((e) => {
-      const { sender, recipient, fromToken, toToken, amountIn, amountOut } = e.args;
+  box.innerHTML = records
+    .map((r) => {
+      const { sender, recipient, fromToken, toToken, amountIn, amountOut } = r.args;
       const isSender = getAddress(sender) === state.account;
       const isRecipient = getAddress(recipient) === state.account;
       const kind = isSender && isRecipient ? "self" : isSender ? "out" : "in";
@@ -661,18 +679,52 @@ async function loadHistory() {
           <div class="tx-body">
             <div class="tx-top">
               <span class="tag ${kind}">${label}</span>
-              <span class="muted small-text">${fmtTime(times.get(e.blockNumber))}</span>
+              <span class="muted small-text">${fmtTime(r.time)}</span>
             </div>
             <div class="tx-amounts">
-              <span class="amt">${coinBadge(sym(fromToken), "sm")}${fmtAmount(amountIn)} ${sym(fromToken)}</span>
+              <span class="amt">${coinBadge(sym(fromToken), "sm")}${fmtAmount(BigInt(amountIn))} ${sym(fromToken)}</span>
               ${icon("arrow-right")}
-              <span class="amt">${coinBadge(sym(toToken), "sm")}${fmtAmount(amountOut)} ${sym(toToken)}</span>
+              <span class="amt">${coinBadge(sym(toToken), "sm")}${fmtAmount(BigInt(amountOut))} ${sym(toToken)}</span>
             </div>
-            <div class="tx-meta"><span>${other}</span><span>Mã GD ${txLink(e.transactionHash, true)}</span></div>
+            <div class="tx-meta"><span>${other}</span><span>Mã GD ${txLink(r.tx, true)}</span></div>
           </div>
         </div>`;
     })
     .join("");
+}
+
+async function loadHistory() {
+  const seq = ++historySeq;
+  const hub = state.hub;
+  const me = state.account;
+  await runScan({
+    label: "Lịch sử chuyển tiền",
+    progressId: "history-progress",
+    key: historyCacheKey(),
+    isCancelled: () => seq !== historySeq,
+    render: renderHistory,
+    // sender, recipient là "indexed" → lọc ngay trên node (topic filter): 2 truy vấn, ví là người gửi / người nhận.
+    // Giao dịch tự gửi cho mình xuất hiện ở cả 2 → bộ nhớ đệm tự loại trùng theo mã giao dịch.
+    query: async (from, to) =>
+      (
+        await Promise.all([
+          hub.queryFilter(hub.filters.Remittance(me), from, to),
+          hub.queryFilter(hub.filters.Remittance(null, me), from, to),
+        ])
+      ).flat(),
+  });
+}
+
+// "Quét lại từ đầu": xoá bộ nhớ đệm rồi tải lại
+function resetHistory() {
+  clearCache(historyCacheKey());
+  $("history").innerHTML = "";
+  return loadHistory();
+}
+function resetLiqHistory() {
+  clearCache(liqCacheKey());
+  $("liq-history").innerHTML = "";
+  return loadLiqHistory();
 }
 
 // ───────────────────────── g. Quản trị (chỉ owner) ─────────────────────────
@@ -1023,67 +1075,55 @@ async function addLiquidity() {
 
 let liqHistorySeq = 0; // bấm Làm mới khi đang tải thì bỏ lượt tải cũ
 
+// Owner xem TOÀN BỘ lần nạp/rút (không lọc theo ví); dùng bộ nhớ đệm riêng
+const liqCacheKey = () => cacheKey(state.chain.chainId, state.chain.hub, "liquidity");
+
+function renderLiqHistory(records, info) {
+  const box = $("liq-history");
+  if (records.length === 0) {
+    box.innerHTML = `<div class="empty">${info.phase === "done" ? "Chưa có lần nạp/rút thanh khoản nào." : "Đang tải…"}</div>`;
+    return;
+  }
+  const rows = records.map((r) => {
+    const { token, amountToken, amountUsd } = r.args;
+    const sym = tokenByAddress(token)?.symbol ?? shortAddr(token);
+    const isAdd = r.name === "LiquidityAdded";
+    return `
+      <tr>
+        <td>${fmtTime(r.time)}</td>
+        <td><span class="pool-name">${coinBadge(sym, "sm")}${sym}</span></td>
+        <td><span class="tag ${isAdd ? "add" : "remove"}">${isAdd ? "Nạp" : "Rút"}</span></td>
+        <td class="num">${fmtAmount(BigInt(amountToken))} ${sym}</td>
+        <td class="num">${fmtAmount(BigInt(amountUsd))} vUSD</td>
+        <td>${txLink(r.tx, true)}</td>
+      </tr>`;
+  });
+  box.innerHTML = `
+    <div class="table-wrap">
+      <table class="liq-table">
+        <thead><tr><th>Thời gian</th><th>Quỹ</th><th>Loại</th><th class="num">Số token</th><th class="num">Số vUSD</th><th>Giao dịch</th></tr></thead>
+        <tbody>${rows.join("")}</tbody>
+      </table>
+    </div>`;
+}
+
 async function loadLiqHistory() {
   const seq = ++liqHistorySeq;
-  const box = $("liq-history");
-  box.innerHTML = `<div class="empty">Đang tải…</div>`;
-  try {
-    const hub = state.hub;
-    const firstBlock = state.chain.deployBlock;
-    const lastBlock = await state.provider.getBlockNumber();
-
-    // Quét từng đoạn tối đa LOG_CHUNK block, như tab Lịch sử
-    const events = [];
-    for (let start = firstBlock; start <= lastBlock; start += LOG_CHUNK) {
-      const end = Math.min(start + LOG_CHUNK - 1, lastBlock);
-      const [added, removed] = await Promise.all([
-        hub.queryFilter(hub.filters.LiquidityAdded(), start, end),
-        hub.queryFilter(hub.filters.LiquidityRemoved(), start, end),
-      ]);
-      if (seq !== liqHistorySeq) return;
-      events.push(...added, ...removed);
-      const pct = Math.round(((end - firstBlock + 1) / (lastBlock - firstBlock + 1)) * 100);
-      box.innerHTML = `<div class="empty">Đang tải… ${pct}% (block ${end.toLocaleString("vi-VN")})</div>`;
-    }
-    events.sort((a, b) => b.blockNumber - a.blockNumber || b.index - a.index); // mới nhất lên đầu
-
-    if (events.length === 0) {
-      box.innerHTML = `<div class="empty">Chưa có lần nạp/rút thanh khoản nào.</div>`;
-      return;
-    }
-
-    const times = new Map();
-    await Promise.all(
-      [...new Set(events.map((e) => e.blockNumber))].map(async (n) => {
-        times.set(n, (await state.provider.getBlock(n)).timestamp);
-      }),
-    );
-    if (seq !== liqHistorySeq) return;
-
-    const rows = events.map((e) => {
-      const { token, amountToken, amountUsd } = e.args;
-      const sym = tokenByAddress(token)?.symbol ?? shortAddr(token);
-      const isAdd = e.eventName === "LiquidityAdded";
-      return `
-        <tr>
-          <td>${fmtTime(times.get(e.blockNumber))}</td>
-          <td><span class="pool-name">${coinBadge(sym, "sm")}${sym}</span></td>
-          <td><span class="tag ${isAdd ? "add" : "remove"}">${isAdd ? "Nạp" : "Rút"}</span></td>
-          <td class="num">${fmtAmount(amountToken)} ${sym}</td>
-          <td class="num">${fmtAmount(amountUsd)} vUSD</td>
-          <td>${txLink(e.transactionHash, true)}</td>
-        </tr>`;
-    });
-    box.innerHTML = `
-      <div class="table-wrap">
-        <table class="liq-table">
-          <thead><tr><th>Thời gian</th><th>Quỹ</th><th>Loại</th><th class="num">Số token</th><th class="num">Số vUSD</th><th>Giao dịch</th></tr></thead>
-          <tbody>${rows.join("")}</tbody>
-        </table>
-      </div>`;
-  } catch (e) {
-    if (seq === liqHistorySeq) box.innerHTML = `<div class="empty">Không tải được lịch sử: ${esc(friendlyError(e))}</div>`;
-  }
+  const hub = state.hub;
+  await runScan({
+    label: "Lịch sử thanh khoản",
+    progressId: "liq-history-progress",
+    key: liqCacheKey(),
+    isCancelled: () => seq !== liqHistorySeq,
+    render: renderLiqHistory,
+    query: async (from, to) =>
+      (
+        await Promise.all([
+          hub.queryFilter(hub.filters.LiquidityAdded(), from, to),
+          hub.queryFilter(hub.filters.LiquidityRemoved(), from, to),
+        ])
+      ).flat(),
+  });
 }
 
 // ───────────────────────── Gắn sự kiện ─────────────────────────
@@ -1134,6 +1174,7 @@ const onSubmit = (fn) => (e) => {
 $("send-form").onsubmit = onSubmit(send);
 
 $("btn-history").onclick = safe(whenConnected(loadHistory));
+$("btn-history-reset").onclick = safe(whenConnected(resetHistory));
 
 $("btn-admin-refresh").onclick = safe(whenConnected(loadAdmin));
 $("btn-pause").onclick = whenConnected(togglePause);
@@ -1144,6 +1185,7 @@ $("btn-liq-fill").onclick = refillLiq;
 $("btn-liq-clear").onclick = clearLiq;
 $("liq-form").onsubmit = onSubmit(addLiquidity);
 $("btn-liq-history").onclick = safe(whenConnected(loadLiqHistory));
+$("btn-liq-history-reset").onclick = safe(whenConnected(resetLiqHistory));
 
 // Khung hướng dẫn: link faucet, nút mở trong app MetaMask (chỉ hiện trên điện thoại chưa có MetaMask)
 $("faucet-link").href = FAUCET_URL;

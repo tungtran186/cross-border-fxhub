@@ -176,8 +176,12 @@
       <section id="panel-history" class="card panel" hidden>
         <div class="card-head">
           <h2>Lịch sử chuyển tiền</h2>
-          <button id="btn-history" class="btn ghost small" data-icon="refresh-cw">Làm mới</button>
+          <div class="head-actions">
+            <button id="btn-history-reset" class="btn ghost small" data-icon="rotate-ccw" title="Xoá bộ nhớ đệm và quét lại toàn bộ">Quét lại từ đầu</button>
+            <button id="btn-history" class="btn ghost small" data-icon="refresh-cw">Làm mới</button>
+          </div>
         </div>
+        <p id="history-progress" class="scan-progress" hidden></p>
         <div id="history" class="tx-list"></div>
       </section>
 
@@ -229,8 +233,12 @@
 
         <div class="sub-head">
           <h3>Lịch sử thanh khoản</h3>
-          <button id="btn-liq-history" class="btn ghost small" data-icon="refresh-cw">Làm mới</button>
+          <div class="head-actions">
+            <button id="btn-liq-history-reset" class="btn ghost small" data-icon="rotate-ccw" title="Xoá bộ nhớ đệm và quét lại toàn bộ">Quét lại từ đầu</button>
+            <button id="btn-liq-history" class="btn ghost small" data-icon="refresh-cw">Làm mới</button>
+          </div>
         </div>
+        <p id="liq-history-progress" class="scan-progress" hidden></p>
         <div id="liq-history"></div>
 
         <!-- Hộp xác nhận ngay trên trang khi nạp làm tỷ giá đổi quá ±5% (không dùng confirm() của trình duyệt) -->

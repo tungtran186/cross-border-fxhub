@@ -628,6 +628,13 @@ input, select {
 /* Lịch sử thanh khoản: bảng cuộn ngang được trên điện thoại */
 .sub-head { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); margin: var(--space-5) 0 var(--space-3); }
 .sub-head h3 { margin: 0; }
+.card-head:has(.head-actions), .sub-head { flex-wrap: wrap; }
+.head-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
+.head-actions .btn { white-space: nowrap; }
+/* Dòng tiến trình quét lịch sử */
+.scan-progress { display: flex; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-3); font-size: 0.82rem; color: var(--muted); }
+.scan-progress .icon { width: 16px; height: 16px; flex-shrink: 0; }
+.scan-progress.error { color: var(--err); }
 .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card-solid); }
 .liq-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; font-variant-numeric: tabular-nums; }
 .liq-table th, .liq-table td { padding: 8px 12px; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--line); }
