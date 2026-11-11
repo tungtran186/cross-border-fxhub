@@ -473,7 +473,7 @@ function showQuoteError(text) {
 }
 
 const WARN_SHORTFALL_BPS = 500n; // hụt (phí + trượt giá) trên 5% → cảnh báo màu cam
-const TOO_BIG_SHORTFALL_BPS = 5000n; // hụt từ 50% → coi là lệnh quá lớn so với quỹ, khoá nút Gửi
+const TOO_BIG_SHORTFALL_BPS = 2000n; // hụt từ 20% → coi là lệnh quá lớn so với quỹ, khoá nút Gửi
 
 // Dòng lý do / cảnh báo ngay dưới ô "Bạn gửi"; type: "error" (đỏ) | "warn" (cam) | "" (ẩn)
 function setAmountMsg(text = "", type = "") {

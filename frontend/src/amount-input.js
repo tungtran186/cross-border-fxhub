@@ -1,6 +1,7 @@
 // Ô nhập số tiền kiểu Việt Nam, tự định dạng KHI ĐANG GÕ:
 //   gõ 500000000 → hiện 500.000.000 ; dấu phẩy là phần thập phân: 1.234,5
-// - Dấu chấm do trang tự thêm, nên phím "." bị bỏ qua (tránh nhầm 1.5 thành 1,5 hay 15).
+// - Dấu chấm hàng nghìn do trang tự thêm; phím "." (bàn phím số, điện thoại) được hiểu là dấu phẩy thập phân
+//   nếu ô chưa có dấu phẩy (đã có thì bỏ qua). Chỉ cho 1 dấu phẩy.
 // - Giữ đúng vị trí con trỏ khi chèn/xoá dấu chấm.
 // - Dán "1.234.567,89", "1234567.89" hay "1,234,567.89" đều hiểu đúng.
 // Giá trị gửi lên contract vẫn đọc bằng parseAmount() (bỏ dấu chấm, đổi phẩy → chấm rồi parseUnits).
@@ -85,7 +86,13 @@ export function attachAmountInput(input) {
     const { selectionStart: s, selectionEnd: end, value } = input;
     // Chặn ký tự không phải số (cho phép 1 dấu phẩy)
     if (e.inputType === "insertText" && e.data) {
-      const allowed = /^[\d,]+$/.test(e.data) && !(e.data.includes(",") && value.replace(value.slice(s, end), "").includes(","));
+      const hasComma = (value.slice(0, s) + value.slice(end)).includes(","); // phần còn lại sau khi thay vùng chọn
+      // Phím "." → cho qua, listener "input" bên dưới đổi thành dấu phẩy; đã có dấu phẩy thì chặn
+      if (e.data === ".") {
+        if (hasComma) e.preventDefault();
+        return;
+      }
+      const allowed = /^[\d,]+$/.test(e.data) && !(e.data.includes(",") && hasComma);
       if (!allowed) e.preventDefault();
       return;
     }
@@ -116,7 +123,25 @@ export function attachAmountInput(input) {
   });
 
   // Gõ / xoá / tự động điền của trình duyệt → định dạng lại
-  input.addEventListener("input", () => reformat(input));
+  input.addEventListener("input", (e) => {
+    // Phím "." (bàn phím số, bàn phím điện thoại) = dấu phẩy thập phân, chỉ khi ô chưa có dấu phẩy.
+    // Xử lý ở đây (không chỉ ở beforeinput) vì bàn phím điện thoại có thể không báo beforeinput.
+    if (e.data === ".") {
+      const c = input.selectionStart ?? input.value.length;
+      const v = input.value;
+      if (c > 0 && v[c - 1] === ".") {
+        const rest = v.slice(0, c - 1) + v.slice(c); // bỏ dấu "." vừa gõ
+        if (rest.includes(",")) {
+          input.value = rest; // đã có dấu phẩy → bỏ qua phím "."
+          input.setSelectionRange(c - 1, c - 1);
+        } else {
+          input.value = v.slice(0, c - 1) + "," + v.slice(c);
+          input.setSelectionRange(c, c);
+        }
+      }
+    }
+    reformat(input);
+  });
 }
 
 // Dùng cho kiểm thử: định dạng 1 chuỗi bất kỳ (con trỏ ở cuối)
