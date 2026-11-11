@@ -505,6 +505,13 @@ input, select {
 .route .step { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; white-space: nowrap; padding: 3px 10px 3px 3px; border-radius: 999px; background: var(--soft); border: 1px solid var(--line); font-weight: 600; }
 .route .icon { width: 16px; height: 16px; flex-shrink: 0; color: var(--muted); }
 #btn-send { margin-top: var(--space-4); }
+/* Lý do/cảnh báo ngay dưới ô "Bạn gửi" */
+.amount-msg { display: flex; align-items: flex-start; gap: 6px; margin: var(--space-2) 0 0; font-size: 0.88rem; font-weight: 600; }
+.amount-msg .icon { width: 16px; height: 16px; flex-shrink: 0; margin-top: 2px; }
+.amount-msg.error { color: var(--err); }
+.amount-msg.warn { color: var(--warn); }
+.amount-box.has-error { border-color: var(--err-border); }
+.amount-box.has-warn { border-color: var(--warn-border); }
 
 /* ═══════════════════ Thông báo (thẻ có icon) ═══════════════════ */
 .status {

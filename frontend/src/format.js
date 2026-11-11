@@ -27,6 +27,16 @@ export function fmtAmount(value, digits = 2) {
   return (negative ? "-" : "") + grouped + (frac ? "," + frac : "");
 }
 
+// Giống fmtAmount nhưng làm tròn ĐÚNG tối đa `digits` chữ số lẻ (không tự thêm chữ số cho số nhỏ).
+// Dùng cho số tự điền vào ô nhập: 38461538461538461538n → "38,46"
+export function fmtFixed(value, digits = 2) {
+  const unit = 10n ** BigInt(DECIMALS - digits);
+  const rounded = ((value + unit / 2n) / unit) * unit; // làm tròn
+  const [int, frac = ""] = formatUnits(rounded, DECIMALS).split(".");
+  const f = frac.slice(0, digits).replace(/0+$/, "");
+  return int.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + (f ? "," + f : "");
+}
+
 // Đọc số người dùng gõ theo kiểu Việt Nam: "100.000" hoặc "1,5" → BigInt (đơn vị nhỏ nhất)
 // Trả về null nếu không hợp lệ
 export function parseAmount(text) {

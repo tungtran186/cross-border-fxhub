@@ -1,10 +1,11 @@
 import "./style.css";
 import { BrowserProvider, Contract, getAddress, isAddress } from "ethers";
 import config from "./contracts.json";
-import { fmtAmount, parseAmount, fmtPct, fmtTime, shortAddr } from "./format.js";
+import { fmtAmount, fmtFixed, parseAmount, fmtPct, fmtTime, shortAddr } from "./format.js";
 import { friendlyError, initErrors, UserError } from "./errors.js";
 import { icon, hydrateIcons, coinBadge, coinName, statusBody } from "./ui.js";
 import { scanWithCache, cacheKey, clearCache } from "./logcache.js";
+import { attachAmountInput } from "./amount-input.js";
 
 initErrors(config.abi);
 
@@ -471,6 +472,24 @@ function showQuoteError(text) {
   $("send-out").textContent = "—";
 }
 
+const WARN_SHORTFALL_BPS = 500n; // hụt (phí + trượt giá) trên 5% → cảnh báo màu cam
+const TOO_BIG_SHORTFALL_BPS = 5000n; // hụt từ 50% → coi là lệnh quá lớn so với quỹ, khoá nút Gửi
+
+// Dòng lý do / cảnh báo ngay dưới ô "Bạn gửi"; type: "error" (đỏ) | "warn" (cam) | "" (ẩn)
+function setAmountMsg(text = "", type = "") {
+  const el = $("send-amount-msg");
+  const box = el.closest(".amount-box");
+  box.classList.toggle("has-error", type === "error");
+  box.classList.toggle("has-warn", type === "warn");
+  el.hidden = !text;
+  el.className = `amount-msg ${type}`;
+  el.innerHTML = text ? `${icon(type === "warn" ? "triangle-alert" : "circle-alert")}<span>${esc(text)}</span>` : "";
+}
+
+// Khoá/mở nút Gửi theo kết quả báo giá (đang gửi dở thì luôn khoá)
+let sending = false;
+const lockSend = (locked) => ($("btn-send").disabled = sending || locked);
+
 let quoteSeq = 0; // chỉ hiện kết quả của lần báo giá mới nhất
 let quoteTimer = null;
 function scheduleQuote() {
@@ -484,33 +503,48 @@ async function updateQuote() {
   const from = tokenBySymbol($("send-from").value);
   const to = tokenBySymbol($("send-to").value);
   const amountText = $("send-amount").value.trim();
+  const balancePromise = from.contract.balanceOf(state.account);
 
   // Số dư đồng gửi, hiện cạnh ô số tiền
-  from.contract.balanceOf(state.account).then((b) => {
-    $("send-balance").textContent = `Số dư: ${fmtAmount(b)} ${from.symbol}`;
+  balancePromise.then((b) => {
+    if (seq === quoteSeq) $("send-balance").textContent = `Số dư: ${fmtAmount(b)} ${from.symbol}`;
   });
 
   updateCoinBadges();
+  setAmountMsg();
+  lockSend(false);
   if (!amountText) {
     box.hidden = true;
-    $("send-out").textContent = "0";
+    $("send-out").textContent = "0"; // chưa gõ gì
     return;
   }
   if (from === to) return showQuoteError("Đồng gửi và đồng nhận phải khác nhau.");
   const amount = parseAmount(amountText);
-  if (amount === null) return showQuoteError("Số tiền không hợp lệ. Gõ kiểu 100.000 hoặc 1,5.");
-  if (amount === 0n) return showQuoteError("Số tiền phải lớn hơn 0.");
+  const notQuotable = (text, lock = true) => {
+    box.hidden = true;
+    $("send-out").textContent = "—";
+    setAmountMsg(text, "error");
+    lockSend(lock);
+  };
+  if (amount === null) return notQuotable("Số tiền không hợp lệ. Gõ kiểu 100.000 hoặc 1,5.");
+  if (amount === 0n) return notQuotable("Số tiền phải lớn hơn 0.");
 
   try {
-    const [out, listed] = await Promise.all([
+    const [out, listed, balance] = await Promise.all([
       state.hub.quote(from.address, to.address, amount),
       listedOut(from, to, amount),
+      balancePromise,
     ]);
     if (seq !== quoteSeq) return; // người dùng đã gõ tiếp, bỏ kết quả cũ
 
+    const shortfall = listed > 0n ? ((listed - out) * 10000n) / listed : 0n;
+    // x*y=k không báo lỗi khi lệnh lớn – chỉ là nhận càng hụt; hụt quá nửa (hoặc nhận 0) thì coi là quá lớn
+    if (out === 0n || shortfall >= TOO_BIG_SHORTFALL_BPS) {
+      return notQuotable("Số tiền quá lớn so với thanh khoản của quỹ, hãy giảm bớt.");
+    }
+
     const bps = slippageBps();
     const minOut = bps === null ? null : (out * (10000n - bps)) / 10000n;
-    const shortfall = listed > 0n ? ((listed - out) * 10000n) / listed : 0n;
     // Lộ trình dạng vJPY → vUSD → vVND
     const hops = from === state.usd || to === state.usd ? [from.symbol, to.symbol] : [from.symbol, "vUSD", to.symbol];
     const route = hops.map((sym) => `<span class="step">${coinBadge(sym, "sm")}${sym}</span>`).join(icon("arrow-right"));
@@ -526,8 +560,18 @@ async function updateQuote() {
         <dt>Nhận tối thiểu</dt><dd>${minOut === null ? "Trượt giá phải từ 0 đến 50%" : `${fmtAmount(minOut)} ${to.symbol}`}</dd>
         <dt>Lộ trình (${hops.length - 1} chặng)</dt><dd class="route">${route}</dd>
       </dl>`;
+
+    // Vẫn hiện báo giá để tham khảo, nhưng vượt số dư thì báo đỏ và khoá nút Gửi
+    if (amount > balance) {
+      setAmountMsg(`Vượt số dư (bạn có ${fmtAmount(balance)} ${from.symbol})`, "error");
+      lockSend(true);
+    } else if (shortfall > WARN_SHORTFALL_BPS) {
+      setAmountMsg(`Lệnh lớn, người nhận bị hụt ${fmtPct(shortfall)} so với tỷ giá quỹ (phí + trượt giá).`, "warn");
+    }
   } catch (e) {
-    if (seq === quoteSeq) showQuoteError(friendlyError(e));
+    if (seq !== quoteSeq) return;
+    // Lỗi đã biết (quỹ trống, thiếu thanh khoản…) → khoá; lỗi mạng → không khoá, bấm Gửi sẽ kiểm tra lại
+    notQuotable(friendlyError(e), e instanceof UserError || /thanh khoản/i.test(friendlyError(e)));
   }
 }
 
@@ -543,6 +587,7 @@ async function send(ev) {
   const bps = slippageBps();
   const hubAddr = state.chain.hub;
 
+  sending = true; // đang gửi: báo giá chạy lại cũng không mở khoá nút
   btn.disabled = true;
   try {
     // Kiểm tra trước để báo lỗi dễ hiểu, khỏi tốn công ký
@@ -597,7 +642,8 @@ async function send(ev) {
   } catch (e) {
     setStatus("send-status", esc(friendlyError(e)), "error");
   } finally {
-    btn.disabled = false;
+    sending = false;
+    btn.disabled = false; // updateQuote bên dưới khoá lại nếu cần
     updateQuote().catch(() => {});
   }
 }
@@ -815,7 +861,8 @@ function fillFrom(side) {
   const target = $(LIQ_INPUT[otherSide(side)]);
   const amount = parseAmount($(LIQ_INPUT[side]).value);
   if (amount === null) target.value = ""; // ô gốc trống / sai → xoá số tự điền cũ
-  else target.value = fmtAmount(side === "token" ? (amount * p.usd) / p.token : (amount * p.token) / p.usd, 6);
+  // Số tự điền: có dấu chấm hàng nghìn, tối đa 2 chữ số lẻ
+  else target.value = fmtFixed(side === "token" ? (amount * p.usd) / p.token : (amount * p.token) / p.usd, 2);
   liqManual[otherSide(side)] = false;
   return true;
 }
@@ -1129,6 +1176,8 @@ async function loadLiqHistory() {
 // ───────────────────────── Gắn sự kiện ─────────────────────────
 
 hydrateIcons();
+// Ô nhập tiền: tự thêm dấu chấm hàng nghìn khi gõ (gắn TRƯỚC các listener khác để chúng đọc số đã định dạng)
+for (const id of ["send-amount", "liq-amount-token", "liq-amount-usd"]) attachAmountInput($(id));
 $("btn-copy").innerHTML = icon("copy");
 $("btn-copy").onclick = async () => {
   try {

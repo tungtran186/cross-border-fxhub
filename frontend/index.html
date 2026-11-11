@@ -135,7 +135,9 @@
                 <select id="send-from" aria-label="Đồng gửi"></select>
               </label>
             </div>
-            <p class="muted small-text">Gõ kiểu Việt Nam: 100.000 hoặc 1,5</p>
+            <!-- Lý do không báo giá được / cảnh báo lệnh lớn (hiện ngay dưới ô) -->
+            <p id="send-amount-msg" class="amount-msg" hidden></p>
+            <p class="muted small-text">Dấu chấm hàng nghìn tự thêm khi gõ; dùng dấu phẩy cho phần lẻ (1,5)</p>
           </div>
 
           <div class="swap-row">
